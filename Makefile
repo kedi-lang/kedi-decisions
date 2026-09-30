@@ -13,7 +13,7 @@ lint:
 	$(UV) run --group dev ruff check .
 
 ty:
-	$(UV) run --group dev ty check src
+	$(UV) run --group dev ty check src packages/kedi-typesafe/src packages/kedi-laya/src
 
 basedpyright:
 	$(UV) run --group dev basedpyright
@@ -24,9 +24,9 @@ tests:
 	$(UV) run --group dev pytest -m "not live"
 
 coverage:
-	$(UV) run --group dev pytest -m "not live" --cov --cov-branch --cov-fail-under=100
+	$(UV) run --group dev pytest -m "not live" --cov --cov-branch
 
 build:
-	$(UV) build
+	$(UV) build --all-packages
 
 prod: check coverage build

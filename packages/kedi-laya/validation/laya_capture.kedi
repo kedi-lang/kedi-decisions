@@ -1,0 +1,29 @@
+> import: laya:
+  Probability
+  ChoiceCriteria
+
+```
+from kedi import decision_info
+```
+
+>> A customer was charged twice and requests a refund.
+The responsible team is [team: Annotated[
+  Literal["billing", "technical"],
+  "Which team should handle the customer request?",
+  `ChoiceCriteria({"billing": "Payments, duplicate charges and invoices", "technical": "Broken software and unavailable services"})`
+]].
+The probability that a refund is requested is [refund: Annotated[
+  Probability,
+  "Does the customer request a refund for a duplicate payment?"
+]].
+
+= ```
+department, probability = team, refund
+evidence = decision_info("team")
+return {
+    "team": department,
+    "refund_probability": probability,
+    "provider": evidence.provider,
+    "confidence": evidence.confidence,
+}
+```

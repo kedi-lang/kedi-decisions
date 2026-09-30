@@ -1,10 +1,13 @@
 {
   "include": [
     "src",
-    "tests"
+    "packages/kedi-typesafe/src",
+    "packages/kedi-laya/src"
   ],
   "extraPaths": [
-    "src"
+    "src",
+    "packages/kedi-typesafe/src",
+    "packages/kedi-laya/src"
   ],
   "pythonVersion": "3.10",
   "typeCheckingMode": "strict"

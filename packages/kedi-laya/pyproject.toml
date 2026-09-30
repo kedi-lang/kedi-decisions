@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kedi-laya"
+version = "0.1.0"
+description = "Local Laya decision models for Kedi, Pydantic AI and LangChain"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = ["kedi-decisions>=0.1,<0.2"]
+
+[project.urls]
+Repository = "https://github.com/kedi-lang/kedi-decisions"
+Issues = "https://github.com/kedi-lang/kedi-decisions/issues"
+
+[project.optional-dependencies]
+mlx = ["laya-mlx>=0.2,<0.3; python_version >= '3.11' and sys_platform == 'darwin' and platform_machine == 'arm64'"]
+torch = ["laya>=0.3.22,<0.4"]
+pydantic = ["kedi-decisions[pydantic]>=0.1,<0.2"]
+langchain = ["kedi-decisions[langchain]>=0.1,<0.2"]
+
+[tool.uv.sources]
+kedi-decisions = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kedi_laya"]
