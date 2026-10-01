@@ -37,9 +37,11 @@ needed. Installation does not download model weights.
 - `packages/kedi-laya/`: local inference, MLX/Torch loading and model wrappers.
 - `tests/`: package isolation and cross-provider contracts.
 
-Kedi users keep `kedi.typesafe` and `> import: typesafe`. Laya uses `kedi.laya`
-and `> import: laya`. These imports expose criteria but never select a model or
-start inference. The provider is `laya`; its backend is a separate property.
+Kedi programs import the shared criteria with `> import: decisions`; Python
+callers embedded in Kedi use `kedi.decisions`. These replace the former
+provider-specific Kedi type-import modules. Neither surface selects a model,
+loads weights, or imports a provider SDK. Standalone Python callers can import
+directly from `kedi_decisions`. Provider packages retain their public API.
 
 ## Compatibility
 

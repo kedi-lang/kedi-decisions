@@ -281,7 +281,7 @@ The rubric contributes and validates [0, N-1] bounds automatically. Fractional
 float scores are retained. You do not need another `Field(ge=..., le=...)` for
 those same bounds. General constraints remain Pydantic-compatible. When using
 Kedi, `from kedi import Constraints` offers a validation-only helper and
-`from kedi.typesafe import Probability, Rubric` exposes these Jev primitives.
+`from kedi.decisions import Probability, Rubric` exposes the shared decision primitives.
 The standalone package does not depend on Kedi.
 
 See [release validation](validation/README.md) for reproducible synthetic batching

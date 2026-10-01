@@ -34,8 +34,8 @@ and reported token usage. An asynchronous `evaluate` method is also available.
 The [complete example](../packages/kedi-laya/examples/local_laya.py) also captures a raw probability.
 `ChoiceCriteria`, `Rubric`, `BooleanCriteria`, `Probability`, nested supported
 models, and strict boolean thresholds share the existing schema implementation.
-The default bool rule remains `probability > 0.85`, independently of any game's
-minimum choice-confidence rule. Free-form strings remain unsupported.
+The default bool rule remains `probability > 0.85`, independently of an
+application's choice-acceptance policy. Free-form strings remain unsupported.
 
 ## Other checkpoints and predictors
 
@@ -94,7 +94,7 @@ With the updated Kedi checkout and this package installed:
 ```kedi
 > adapter: pydantic
 > model: laya/aac6fef/laya-multilingual-mlx
-> import: laya
+> import: decisions
 
 >> The team for "Please refund my duplicate charge" is [team: Literal["billing", "technical"]].
 = <team>
@@ -104,10 +104,11 @@ With the updated Kedi checkout and this package installed:
 explicit MLX alias. These are decision models, not general-purpose agent harnesses.
 Kedi does not attach its implicit artifact toolset to these models.
 
-`> import: laya` exposes the same shared criteria as `from kedi.laya import ...`.
+`> import: decisions` exposes the same shared criteria as `from kedi.decisions import ...`.
 Laya uses `decision_threshold` (default `0.85`, strict greater-than) and
 `decision_tool_call_threshold` (default `0.6`). Jev's existing `typesafe_*`
-settings and public imports are unchanged.
+settings and the standalone provider package APIs are unchanged. Both providers
+use the shared Kedi criteria import instead of provider-specific type modules.
 
 Zero-argument handoffs can be selected and returned to the agent framework.
 Parameterized tools raise `ToolCallProposed` for an explicit argument-producing

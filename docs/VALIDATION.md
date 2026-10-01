@@ -15,8 +15,9 @@ The shared package is under `src/kedi_decisions/`; extensions are under
 or require TypeSafe SDK. All three packages are installed editable in the Kedi
 development environment.
 
-Kedi retains `kedi.typesafe` and `> import: typesafe`, and adds `kedi.laya` and
-`> import: laya`. The canonical provider ID is `laya/<checkpoint>`. Backend
+Kedi exposes shared criteria through `kedi.decisions` and `> import: decisions`.
+Provider-specific Kedi type imports have been consolidated into that surface.
+The canonical provider ID is `laya/<checkpoint>`. Backend
 selection is separate: `auto`, `mlx`, or `torch`. The legacy `laya-mlx/` model
 prefix remains accepted and explicitly selects MLX.
 
