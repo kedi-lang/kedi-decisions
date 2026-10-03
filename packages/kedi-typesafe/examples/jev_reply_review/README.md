@@ -66,17 +66,18 @@ repair above was a separate controlled invocation, not part of the main run.
 
 ## Reproduce
 
-Use an environment with this `kedi-typesafe` checkout and a Kedi checkout that
+Use an environment with this `kedi-decisions` monorepo and a Kedi checkout that
 includes the decision-metadata API. The recorded
 environment used Kedi 0.4.0, kedi-typesafe 0.2.0, pydantic-ai-slim 2.45.0, and
 typesafe-sdk 0.6.0. Version labels alone do not identify uncommitted changes.
 
-Configure `OPENROUTER_API_KEY` and `TYPESAFE_API_KEY` in the `kedi-typesafe`
-repository's `.env` or process environment. With that environment activated,
-run from the `kedi-typesafe` repository root:
+Configure `OPENROUTER_API_KEY` and `TYPESAFE_API_KEY` in the monorepo's `.env`
+or process environment. With that environment activated, run from the
+`kedi-decisions` repository root:
 
 ```sh
-PYDANTIC_AI_NO_BANNER=1 python examples/jev_reply_review/run.py --output /tmp/kedi-jev-reply-review.json
+PYDANTIC_AI_NO_BANNER=1 python packages/kedi-typesafe/examples/jev_reply_review/run.py \
+  --env-file .env --output /tmp/kedi-jev-reply-review.json
 ```
 
 When the monorepo is checked out as `decisions/` inside the Kedi workspace,
