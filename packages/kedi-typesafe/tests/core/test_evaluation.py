@@ -365,6 +365,7 @@ async def test_only_closes_owned_client(monkeypatch: pytest.MonkeyPatch) -> None
     assert owned.closed is True
     assert constructor_options == {
         "api_key": "secret",
+        "base_url": "https://api.typesafe.ai",
         "model": "jev-test",
         "timeout": 3.0,
     }
@@ -404,6 +405,7 @@ def test_only_closes_owned_sync_client(monkeypatch: pytest.MonkeyPatch) -> None:
     assert owned.closed is True
     assert constructor_options == {
         "api_key": "secret",
+        "base_url": "https://api.typesafe.ai",
         "model": "jev-test",
         "timeout": 3.0,
     }

@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
+from functools import cached_property
 from types import TracebackType
 from typing import Any, ClassVar, Literal
 
+from kedi_decisions.routing import ToolCallProposed, prepare_routing, resolve_routing
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.messages import (
@@ -17,13 +19,13 @@ from pydantic_ai.messages import (
     TextPart,
     ToolCallPart,
 )
-from pydantic_ai.models import ModelRequestParameters, check_allow_model_requests
+from pydantic_ai.models import Model, ModelRequestParameters, check_allow_model_requests
+from pydantic_ai.models import decision as decision_model
 from pydantic_ai.models import typesafe as upstream
 from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RequestUsage
-from typesafe_sdk import SystemOneResponse, Usage
 from typing_extensions import Self
 
 from ..core import CandidateExtractor, TypeSafeEvaluator
@@ -31,10 +33,8 @@ from ..core.evaluation import (
     DEFAULT_THRESHOLD,
     AsyncSystemOneClient,
     JSONValue,
-    _request_metadata,
     validate_threshold,
 )
-from ..core.schema import EvaluationPlan
 from ._pydantic_errors import provider_errors
 from ._pydantic_provider import EvaluatorProvider
 from ._pydantic_stream import ExtendedTypeSafeStream
@@ -44,6 +44,7 @@ _PROFILE = ModelProfile(
     supports_json_schema_output=True,
     supports_json_object_output=False,
     default_structured_output_mode="tool",
+    supports_inline_system_prompts=True,
 )
 
 
@@ -54,7 +55,10 @@ class TypeSafeModelSettings(upstream.TypeSafeModelSettings, total=False):
 
 def messages_to_state(messages: list[ModelMessage]) -> JSONValue:
     """Use the pinned upstream projection, including tool and retry history."""
-    return upstream._map_messages(messages)
+    state = decision_model._map_messages(messages, turn=False)
+    if not isinstance(state, (str, list, dict)):
+        raise TypeError("Decision history must map to text or structured state")
+    return state
 
 
 class TypeSafeModel(upstream.TypeSafeModel):
@@ -63,11 +67,17 @@ class TypeSafeModel(upstream.TypeSafeModel):
     supports_decision_threshold = True
     kedi_prompt_mode: ClassVar[Literal["decision"]] = "decision"
 
+    @cached_property
+    def profile(self) -> ModelProfile:
+        # NativeOutput is serialized locally; free text is rejected in request().
+        return _PROFILE
+
     def __init__(
         self,
         model_name: str = "jev-latest",
         *,
         api_key: str | None = None,
+        base_url: str | None = None,
         threshold: float = DEFAULT_THRESHOLD,
         timeout: float | None = None,
         client: AsyncSystemOneClient | None = None,
@@ -77,6 +87,7 @@ class TypeSafeModel(upstream.TypeSafeModel):
         self._evaluator = TypeSafeEvaluator(
             model_name,
             api_key=api_key,
+            base_url=base_url,
             threshold=threshold,
             timeout=timeout,
             client=client,
@@ -96,7 +107,12 @@ class TypeSafeModel(upstream.TypeSafeModel):
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
         check_allow_model_requests()
-        settings, parameters = self.prepare_request(model_settings, model_request_parameters)
+        if model_request_parameters.native_tools:
+            raise UserError("Native tools are unsupported by TypeSafeModel")
+        if model_request_parameters.allow_image_output:
+            raise UserError("Image output is not supported by TypeSafeModel")
+        # Keep Kedi's strict thresholds instead of upstream's changed routing defaults.
+        settings, parameters = Model.prepare_request(self, model_settings, model_request_parameters)
         settings = settings or {}
         unsupported = set(settings) - {"typesafe_threshold", "typesafe_tool_call_threshold"}
         if unsupported:
@@ -108,6 +124,8 @@ class TypeSafeModel(upstream.TypeSafeModel):
         )
         tool_threshold = validate_threshold(settings.get("typesafe_tool_call_threshold", 0.6))
         native = parameters.output_mode == "native" and parameters.output_object is not None
+        if parameters.allow_text_output and not native:
+            raise UserError("Text output is not supported by TypeSafeModel")
         if native:
             output = parameters.output_object
             assert output is not None
@@ -118,8 +136,11 @@ class TypeSafeModel(upstream.TypeSafeModel):
             )
             hand_offs: list[ToolDefinition] = []
         else:
-            output_tool, hand_offs = upstream._output_tools(parameters)
-        tools = upstream._tools_left(
+            outputs, hand_offs = decision_model._output_tools(parameters)
+            if len(outputs) > 1:
+                raise UserError("TypeSafeModel supports one structured output schema")
+            output_tool = outputs[0] if outputs else None
+        tools, _ = decision_model._tools_left(
             messages,
             [
                 *hand_offs,
@@ -136,59 +157,40 @@ class TypeSafeModel(upstream.TypeSafeModel):
         )
         if instructions:
             state = {"state": state, "instructions": instructions}
-        plan = (
-            self._evaluator._plan(state, output_tool.parameters_json_schema)
-            if output_tool
-            else EvaluationPlan(questions=())
+        if tools and output_tool and not (decision_model._purpose(output_tool) or instructions):
+            raise UserError("Give the output type a docstring or provide agent instructions")
+        if output_tool is None and not tools:
+            raise UserError("TypeSafeModel requires an output schema or a hand-off tool")
+        route = prepare_routing(
+            output_tool.parameters_json_schema if output_tool else {"properties": {}},
+            [
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters_json_schema,
+                }
+                for tool in tools
+            ],
+            set(),
+            allow_final=output_tool is not None,
         )
-        questions = plan.native_questions()
-        route_key = upstream._tool_question(questions, output_tool, tools, instructions or None)
-        if questions:
-            with provider_errors(self.model_name):
-                response = await self._evaluator.async_client().system_one(
-                    state, questions, model=self.model_name
-                )
-        else:
-            response = SystemOneResponse(
-                model=self.model_name, answers={}, usage=Usage(input_tokens=0, output_tokens=0)
+        with provider_errors(self.model_name):
+            result = await self._evaluator.evaluate(
+                state=state, schema=route.schema, threshold=threshold
             )
-        details: dict[str, Any] = {}
-        call = (
-            upstream._tool_call(
-                self.model_name,
-                response.answers.get(route_key),
-                output_tool,
-                tools,
-                {tool.name for tool in hand_offs},
-                tool_threshold,
-                details,
-            )
-            if route_key
-            else None
-        )
+        try:
+            result, call = resolve_routing(result, route, tool_threshold)
+        except ToolCallProposed as exc:
+            raise decision_model.UnfillableRoute(
+                self.model_name, exc.tool_name, exc.probability
+            ) from exc
+        details: dict[str, Any] = {"typesafe": result.metadata}
         parts: list[ModelResponsePart]
         if call is not None:
-            parts = [call]
+            parts = [ToolCallPart(call["name"], {})]
         else:
-            field_response = SystemOneResponse(
-                model=response.model,
-                usage=response.usage,
-                answers={key: value for key, value in response.answers.items() if key != route_key},
-            )
-            result = self._evaluator._result(
-                field_response,
-                plan,
-                threshold,
-                request_metadata=_request_metadata(
-                    state,
-                    plan,
-                    model=self.model_name,
-                    threshold=threshold,
-                ),
-            )
-            details["typesafe"] = result.metadata
-            # Without an output schema, upstream routing returns a call or raises.
-            assert output_tool is not None
+            if output_tool is None:
+                raise UserError("TypeSafeModel did not select a hand-off above the threshold")
             parts = (
                 [TextPart(json.dumps(result.values, ensure_ascii=False))]
                 if native
@@ -197,10 +199,10 @@ class TypeSafeModel(upstream.TypeSafeModel):
         return ModelResponse(
             parts=parts,
             usage=RequestUsage(
-                input_tokens=response.usage.input_tokens or 0,
-                output_tokens=response.usage.output_tokens or 0,
+                input_tokens=result.input_tokens or 0,
+                output_tokens=result.output_tokens or 0,
             ),
-            model_name=response.model,
+            model_name=result.model,
             provider_name=self.system,
             provider_url=self.base_url,
             provider_details=details,

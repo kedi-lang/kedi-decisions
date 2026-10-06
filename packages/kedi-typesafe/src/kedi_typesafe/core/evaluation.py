@@ -4,13 +4,13 @@ import asyncio
 import hashlib
 import json
 import math
-from collections.abc import Mapping
+import os
+from collections.abc import Mapping, Sequence
 from typing import Any, Protocol, TypeAlias
 
 from kedi_decisions.evaluation import EvaluationResult, ResultDecoder
 from typesafe_sdk import (
     AsyncTypeSafeClient,
-    JSONContent,
     Question,
     SystemOneResponse,
     TypeSafeClient,
@@ -21,7 +21,10 @@ from .extraction import CandidateExtractor
 from .schema import EvaluationPlan, build_evaluation_plan
 from .transport import response_from_sdk
 
-JSONValue: TypeAlias = JSONContent
+_JSONData: TypeAlias = (
+    str | int | float | bool | None | Mapping[str, "_JSONData"] | Sequence["_JSONData"]
+)
+JSONValue: TypeAlias = str | Mapping[str, _JSONData] | Sequence[_JSONData]
 DEFAULT_THRESHOLD = 0.85
 
 
@@ -122,6 +125,7 @@ class TypeSafeEvaluator(ResultDecoder):
         model_name: str = "jev-latest",
         *,
         api_key: str | None = None,
+        base_url: str | None = None,
         threshold: float = DEFAULT_THRESHOLD,
         timeout: float | None = None,
         client: AsyncSystemOneClient | None = None,
@@ -135,6 +139,7 @@ class TypeSafeEvaluator(ResultDecoder):
         self.threshold = validate_threshold(threshold)
         self.text_extractors = dict(text_extractors or {})
         self._api_key = api_key
+        self._base_url = base_url or os.environ.get("TYPESAFE_BASE_URL", "https://api.typesafe.ai")
         self._timeout = timeout
         self._borrowed_client = client
         self._clients: dict[asyncio.AbstractEventLoop, AsyncSystemOneClient] = {}
@@ -148,9 +153,7 @@ class TypeSafeEvaluator(ResultDecoder):
 
     @property
     def base_url(self) -> str:
-        return getattr(
-            self._borrowed_client or self._sync_client, "base_url", "https://api.typesafe.ai/v1"
-        )
+        return getattr(self._borrowed_client or self._sync_client, "base_url", self._base_url)
 
     async def evaluate(
         self,
@@ -198,6 +201,7 @@ class TypeSafeEvaluator(ResultDecoder):
             if client is None:
                 client = AsyncTypeSafeClient(
                     api_key=self._api_key,
+                    base_url=self._base_url,
                     model=self.model_name,
                     timeout=self._timeout,
                 )
@@ -232,11 +236,13 @@ class TypeSafeEvaluator(ResultDecoder):
         if client is None:
             client = TypeSafeClient(
                 api_key=self._api_key,
+                base_url=self._base_url,
                 model=self.model_name,
                 timeout=self._timeout,
             )
             self._sync_client = client
-        response = client.system_one(
+        # TypeSafe SDK 0.7.2 exposes a partially unknown recursive JSON annotation.
+        response = client.system_one(  # pyright: ignore[reportUnknownMemberType]
             state,
             plan.native_questions(),
             model=self.model_name,

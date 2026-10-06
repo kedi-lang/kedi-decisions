@@ -9,7 +9,7 @@ from typing import Annotated
 import pytest
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, NativeOutput
-from pydantic_ai.models.typesafe import ToolCallProposed
+from pydantic_ai.models.decision import UnfillableRoute
 from pydantic_ai.models.typesafe import TypeSafeModel as UpstreamModel
 from typesafe_sdk import (
     Answer,
@@ -112,8 +112,8 @@ async def test_argument_tool_proposes_without_executing() -> None:
     def lookup(query: str) -> str:
         raise AssertionError("Jev cannot invent arguments")
 
-    with pytest.raises(ToolCallProposed) as error:
+    with pytest.raises(UnfillableRoute) as error:
         await agent.run("Check the claim")
     assert lookup.__name__ == "lookup"
-    assert error.value.tool_name == "lookup"
+    assert error.value.route == "lookup"
     assert error.value.probability == 1

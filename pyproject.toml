@@ -19,8 +19,8 @@ Issues = "https://github.com/kedi-lang/kedi-decisions/issues"
 typesafe = ["kedi-typesafe==0.3.0"]
 laya = ["kedi-laya[torch,pydantic]==0.1.0"]
 laya-mlx = ["kedi-laya[mlx,pydantic]==0.1.0"]
-pydantic = ["pydantic-ai-slim==2.45.0"]
-langchain = ["langchain==1.3.18"]
+pydantic = ["pydantic-ai-slim==2.54.0"]
+langchain = ["langchain==1.4.3"]
 
 [dependency-groups]
 dev = [

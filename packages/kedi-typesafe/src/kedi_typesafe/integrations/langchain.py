@@ -42,6 +42,7 @@ class TypeSafeChatModel(DecisionChatModel):
         model_name: str = "jev-latest",
         *,
         api_key: str | None = None,
+        base_url: str | None = None,
         threshold: float = DEFAULT_THRESHOLD,
         timeout: float | None = None,
         client: AsyncSystemOneClient | None = None,
@@ -51,12 +52,13 @@ class TypeSafeChatModel(DecisionChatModel):
     ) -> None:
         transport = None
         if client is None or sync_client is None:
-            transport = ClassifierTransport(api_key=api_key, timeout=timeout)
+            transport = ClassifierTransport(api_key=api_key, timeout=timeout, base_url=base_url)
             client = client or transport
             sync_client = sync_client or SyncClassifierTransport(transport)
         evaluator = TypeSafeEvaluator(
             model_name,
             api_key=api_key,
+            base_url=base_url,
             threshold=threshold,
             timeout=timeout,
             client=client,

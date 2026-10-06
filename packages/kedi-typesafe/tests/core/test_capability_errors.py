@@ -6,7 +6,6 @@ from collections.abc import Callable
 # pyright: reportPrivateUsage=false
 from typing import Annotated, Any
 
-import msgspec
 import pytest
 from pydantic import BaseModel, EmailStr
 from typesafe_sdk import NoulAnswer, ScoreAnswer, SystemOneResponse, Usage
@@ -142,7 +141,7 @@ def test_invalid_rubric_answers_are_errors(changes: dict[str, Any]) -> None:
         score=0.5, confidence=0, probabilities={0: 0.5, 1: 0.5}, legend={0: "bad", 1: "good"}
     )
     response = SystemOneResponse(
-        model="test", usage=Usage(), answers={"score": msgspec.structs.replace(answer, **changes)}
+        model="test", usage=Usage(), answers={"score": answer.model_copy(update=changes)}
     )
     with pytest.raises(TypeSafeResponseError):
         TypeSafeEvaluator()._result(response, plan)

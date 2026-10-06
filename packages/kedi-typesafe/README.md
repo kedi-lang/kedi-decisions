@@ -76,6 +76,30 @@ agent = Agent(TypeSafeModel(threshold=0.9), output_type=Triage)
 result = agent.run_sync("Please refund the duplicate charge", model_settings={"typesafe_threshold": 0.95})
 ```
 
+## Custom Endpoints
+
+Both `TypeSafeModel` and `TypeSafeChatModel` accept `base_url=`. Alternatively,
+set `TYPESAFE_BASE_URL`; an explicit constructor value takes precedence. Use
+the HTTPS server origin, not `/v1/systemone`: the SDK adds that route. Leave
+the setting unset to use the public TypeSafe service.
+
+```python
+import os
+
+from kedi_typesafe import TypeSafeModel
+
+model = TypeSafeModel(
+    "jev-latest",
+    api_key=os.environ["TYPESAFE_API_KEY"],
+    base_url=os.environ["TYPESAFE_BASE_URL"],
+)
+```
+
+Custom-endpoint errors never trigger a fallback to the public endpoint. Keep
+keys in the environment, not in source files or benchmark assets. The SDK
+integrations target TypeSafe SDK 0.7.2 and Pydantic AI 2.54.0. LangChain uses
+the classifier's per-invocation questions contract.
+
 ## Typed Questions
 
 ```python
