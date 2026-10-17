@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kedi-decisions"
-version = "0.1.0"
+version = "0.1.1"
 description = "Typed decision contracts and model integrations"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 dependencies = ["jsonschema>=4.26,<5", "pydantic>=2.12,<3"]
 
@@ -16,10 +16,10 @@ Repository = "https://github.com/kedi-lang/kedi-decisions"
 Issues = "https://github.com/kedi-lang/kedi-decisions/issues"
 
 [project.optional-dependencies]
-typesafe = ["kedi-typesafe==0.3.0"]
-laya = ["kedi-laya[torch,pydantic]==0.1.0"]
-laya-mlx = ["kedi-laya[mlx,pydantic]==0.1.0"]
-pydantic = ["pydantic-ai-slim==2.54.0"]
+typesafe = ["kedi-typesafe==0.3.1"]
+laya = ["kedi-laya[torch,pydantic]==0.1.1"]
+laya-mlx = ["kedi-laya[mlx,pydantic]==0.1.1"]
+pydantic = ["pydantic-ai-slim>=2.57.0,<2.58"]
 langchain = ["langchain==1.4.3"]
 
 [dependency-groups]
@@ -45,7 +45,7 @@ markers = ["live: calls a real model and is excluded from normal quality gates"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["B", "C4", "E", "F", "I", "N", "SIM", "UP", "W"]

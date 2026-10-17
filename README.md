@@ -2,6 +2,8 @@
 
 Provider-neutral typed decisions, with independent Jev and Laya integrations.
 
+Requires Python 3.11 or newer. Pydantic AI integrations target version 2.57.
+
 The root `kedi-decisions` package contains schema planning, criteria, validation,
 decision evidence and optional framework bridges. It imports neither TypeSafe
 SDK nor MLX/PyTorch. Provider packages live in `packages/` and can be installed

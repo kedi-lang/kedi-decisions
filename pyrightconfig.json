@@ -9,6 +9,6 @@
     "packages/kedi-typesafe/src",
     "packages/kedi-laya/src"
   ],
-  "pythonVersion": "3.10",
+  "pythonVersion": "3.11",
   "typeCheckingMode": "strict"
 }

@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kedi-typesafe"
-version = "0.3.0"
+version = "0.3.1"
 description = "TypeSafe AI integrations for Kedi"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
-    "kedi-decisions>=0.1,<0.2",
-    "pydantic-ai-slim[typesafe]==2.54.0",
+    "kedi-decisions>=0.1.1,<0.2",
+    "pydantic-ai-slim[typesafe]>=2.57.0,<2.58",
     "typesafe-sdk==0.7.2",
 ]
 
@@ -56,7 +56,7 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["B", "C4", "E", "F", "I", "N", "SIM", "UP", "W"]
@@ -72,7 +72,7 @@ show_missing = true
 skip_covered = true
 
 [tool.ty.environment]
-python-version = "3.10"
+python-version = "3.11"
 root = ["./src"]
 
 [tool.hatch.build.targets.wheel]

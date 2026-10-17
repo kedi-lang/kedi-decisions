@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping, Sequence
 from types import TracebackType
-from typing import Any, ClassVar, Literal, NoReturn, cast
+from typing import Any, ClassVar, Literal, NoReturn, Self, cast
 
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
@@ -23,7 +23,6 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import PrivateAttr, TypeAdapter, field_validator
-from typing_extensions import Self
 
 from ..evaluation import (
     DEFAULT_THRESHOLD,

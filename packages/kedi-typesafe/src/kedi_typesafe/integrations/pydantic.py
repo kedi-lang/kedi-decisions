@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from functools import cached_property
 from types import TracebackType
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, Self
 
 from kedi_decisions.routing import ToolCallProposed, prepare_routing, resolve_routing
 from pydantic_ai import RunContext
@@ -26,7 +26,6 @@ from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RequestUsage
-from typing_extensions import Self
 
 from ..core import CandidateExtractor, TypeSafeEvaluator
 from ..core.evaluation import (
@@ -55,7 +54,7 @@ class TypeSafeModelSettings(upstream.TypeSafeModelSettings, total=False):
 
 def messages_to_state(messages: list[ModelMessage]) -> JSONValue:
     """Use the pinned upstream projection, including tool and retry history."""
-    state = decision_model._map_messages(messages, turn=False)
+    state = decision_model._map_messages(messages, turn=False, images=None)
     if not isinstance(state, (str, list, dict)):
         raise TypeError("Decision history must map to text or structured state")
     return state

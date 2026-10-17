@@ -97,7 +97,7 @@ model = TypeSafeModel(
 
 Custom-endpoint errors never trigger a fallback to the public endpoint. Keep
 keys in the environment, not in source files or benchmark assets. The SDK
-integrations target TypeSafe SDK 0.7.2 and Pydantic AI 2.54.0. LangChain uses
+integrations target TypeSafe SDK 0.7.2 and Pydantic AI 2.57.0. LangChain uses
 the classifier's per-invocation questions contract.
 
 ## Typed Questions
