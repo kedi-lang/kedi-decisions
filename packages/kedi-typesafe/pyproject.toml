@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kedi-typesafe"
-version = "0.3.1"
+version = "0.3.2"
 description = "TypeSafe AI integrations for Kedi"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
     "kedi-decisions>=0.1.1,<0.2",
-    "pydantic-ai-slim[typesafe]>=2.57.0,<2.58",
+    "pydantic-ai-slim[typesafe]>=2.64.0,<2.65",
     "typesafe-sdk==0.7.2",
 ]
 

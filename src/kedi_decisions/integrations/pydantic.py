@@ -13,7 +13,7 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
-    RetryPromptPart,
+    RetryFeedbackPart,
     SystemPromptPart,
     TextPart,
     ToolCallPart,
@@ -64,6 +64,8 @@ def messages_to_state(messages: list[ModelMessage]) -> JSONValue:
                         "tool_call_id": part.tool_call_id,
                     }
                 )
+            elif isinstance(part, ToolReturnPart) and part.outcome == "retried":
+                history.append({"role": "retry", "content": part.model_response_str()})
             elif isinstance(part, ToolReturnPart):
                 history.append(
                     {
@@ -73,7 +75,7 @@ def messages_to_state(messages: list[ModelMessage]) -> JSONValue:
                         "tool_call_id": part.tool_call_id,
                     }
                 )
-            elif isinstance(part, RetryPromptPart):
+            elif isinstance(part, RetryFeedbackPart):
                 history.append({"role": "retry", "content": part.model_response()})
             else:
                 raise UserError(f"Unsupported decision input part: {part.part_kind}")

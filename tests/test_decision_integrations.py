@@ -242,7 +242,14 @@ async def test_optional_extraction_without_candidates_never_calls_provider(evalu
 
 @pytest.mark.asyncio
 async def test_pydantic_instructions_and_message_history_are_preserved(evaluator):
-    from pydantic_ai.messages import RetryPromptPart, SystemPromptPart, TextPart
+    from pydantic_ai.messages import (
+        RetryFeedbackPart,
+        RetryInfo,
+        SystemPromptPart,
+        TextPart,
+        ToolCallPart,
+        ToolReturnPart,
+    )
 
     from kedi_decisions.integrations.pydantic import messages_to_state
 
@@ -253,11 +260,25 @@ async def test_pydantic_instructions_and_message_history_are_preserved(evaluator
     messages = [
         ModelRequest(parts=[SystemPromptPart("Policy"), UserPromptPart("First")]),
         ModelResponse(parts=[TextPart("Earlier response")]),
-        ModelRequest(parts=[RetryPromptPart("Try again"), UserPromptPart("Second")]),
+        ModelResponse(parts=[ToolCallPart("lookup", {"q": "x"}, tool_call_id="c1")]),
+        ModelRequest(
+            parts=[
+                ToolReturnPart("lookup", "bad query", tool_call_id="c1", outcome="retried"),
+                RetryFeedbackPart("Try again", retry=RetryInfo(cause="model_retry")),
+                UserPromptPart("Second"),
+            ]
+        ),
     ]
     state = messages_to_state(messages)
     assert state["text"] == "Second"
-    assert [item["role"] for item in state["history"]] == ["system", "user", "assistant", "retry"]
+    assert [item["role"] for item in state["history"]] == [
+        "system",
+        "user",
+        "assistant",
+        "assistant",
+        "retry",
+        "retry",
+    ]
     with pytest.raises(UserError, match="input to evaluate"):
         messages_to_state([])
     with pytest.raises(UserError, match="text-only"):

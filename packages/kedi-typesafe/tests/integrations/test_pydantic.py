@@ -12,7 +12,8 @@ from pydantic_ai.messages import (
     ImageUrl,
     ModelRequest,
     ModelResponse,
-    RetryPromptPart,
+    RetryFeedbackPart,
+    RetryInfo,
     SystemPromptPart,
     TextContent,
     TextPart,
@@ -307,6 +308,7 @@ def test_unknown_usage_is_not_converted_to_zero() -> None:
 
 
 def test_messages_to_state_preserves_text_history_and_latest_instructions() -> None:
+    retry = RetryFeedbackPart("invalid previous value", retry=RetryInfo(cause="validation_error"))
     state = messages_to_state(
         [
             ModelRequest(
@@ -317,7 +319,7 @@ def test_messages_to_state_preserves_text_history_and_latest_instructions() -> N
             ModelRequest(
                 parts=[
                     SystemPromptPart("runtime system context"),
-                    RetryPromptPart("invalid previous value"),
+                    retry,
                     UserPromptPart("next"),
                 ],
                 instructions="new",
@@ -329,11 +331,7 @@ def test_messages_to_state_preserves_text_history_and_latest_instructions() -> N
             {"user": "first\n\n second"},
             {"assistant": '{"response":true}'},
             {"system": "runtime system context"},
-            {
-                "retry": (
-                    "Validation feedback:\ninvalid previous value\n\nFix the errors and try again."
-                ),
-            },
+            {"retry": retry.model_response()},
         ],
         "text": "next",
     }

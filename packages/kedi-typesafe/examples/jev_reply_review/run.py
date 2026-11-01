@@ -7,7 +7,7 @@ import io
 import json
 from contextlib import redirect_stdout
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import sha256
 from importlib.metadata import version
 from pathlib import Path
@@ -28,7 +28,7 @@ def main() -> None:
     source_path = Path(__file__).with_name("main.kedi")
     source = source_path.read_text()
     record = {
-        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "recorded_at": datetime.now(UTC).isoformat(),
         "source_sha256": sha256(source.encode()).hexdigest(),
         "mode": "live",
         "versions": {
