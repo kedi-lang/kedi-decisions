@@ -3,7 +3,7 @@ from __future__ import annotations
 # Malformed wire schemas and direct decoding are internal contract tests.
 # pyright: reportPrivateUsage=false
 import pytest
-from typesafe_sdk import NoulAnswer, SystemOneResponse, Usage
+from typesafe_sdk import BoxAnswer, NoulAnswer, SystemOneResponse, Usage
 
 from kedi_typesafe import (
     TypeSafeEvaluator,
@@ -12,6 +12,7 @@ from kedi_typesafe import (
     build_evaluation_plan,
 )
 from kedi_typesafe.core.schema import EvaluationPlan, QuestionSpec
+from kedi_typesafe.core.transport import response_from_sdk
 
 
 def test_recursive_objects_are_rejected() -> None:
@@ -70,3 +71,10 @@ def test_direct_plan_without_schema_and_wrong_score_type() -> None:
     )
     with pytest.raises(TypeSafeResponseError, match="Score answer"):
         evaluator._decode_score(score, NoulAnswer(noul=0.5))
+
+
+def test_unrequested_answer_types_are_rejected() -> None:
+    box = BoxAnswer(box={"top": 0.1, "bottom": 0.9, "left": 0.2, "right": 0.8}, confidence=None)
+    response = SystemOneResponse(model="test", answers={"where": box}, usage=Usage())
+    with pytest.raises(TypeSafeResponseError, match="unsupported 'box' answer for 'where'"):
+        response_from_sdk(response)

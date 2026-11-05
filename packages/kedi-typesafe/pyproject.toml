@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kedi-typesafe"
-version = "0.3.2"
+version = "0.3.3"
 description = "TypeSafe AI integrations for Kedi"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
-    "kedi-decisions>=0.1.1,<0.2",
-    "pydantic-ai-slim[typesafe]>=2.64.0,<2.65",
-    "typesafe-sdk==0.7.2",
+    "kedi-decisions>=0.1.3,<0.2",
+    "pydantic-ai-slim[typesafe]>=2.66.0,<2.67",
+    "typesafe-sdk==0.7.5",
 ]
 
 [project.urls]
@@ -21,29 +21,29 @@ Issues = "https://github.com/kedi-lang/kedi-decisions/issues"
 
 [project.optional-dependencies]
 email = ["email-validator>=2.3,<3"]
-langchain = ["langchain==1.4.3", "langchain-typesafe==0.0.1a3"]
-phone = ["pydantic-extra-types>=2.10,<3", "phonenumbers>=9,<10"]
+langchain = ["langchain==1.4.9", "langchain-typesafe==0.0.1"]
+phone = ["pydantic-extra-types>=2.11.1,<3", "phonenumbers>=9,<10"]
 all = [
-    "langchain-typesafe==0.0.1a3",
+    "langchain-typesafe==0.0.1",
     "email-validator>=2.3,<3",
-    "langchain==1.4.3",
-    "pydantic-extra-types>=2.10,<3",
+    "langchain==1.4.9",
+    "pydantic-extra-types>=2.11.1,<3",
     "phonenumbers>=9,<10",
 ]
 
 [dependency-groups]
 dev = [
-    "langchain-typesafe==0.0.1a3",
-    "basedpyright>=1.39.6,<1.40",
+    "langchain-typesafe==0.0.1",
+    "basedpyright>=1.40.2,<1.41",
     "email-validator>=2.3,<3",
-    "langchain==1.4.3",
+    "langchain==1.4.9",
     "phonenumbers>=9,<10",
-    "pytest>=8.4,<9",
-    "pytest-asyncio>=1.2,<2",
-    "pytest-cov>=7,<8",
-    "pydantic-extra-types>=2.10,<3",
-    "ruff>=0.14,<0.15",
-    "ty>=0.0.17,<0.1",
+    "pytest>=9.2,<10",
+    "pytest-asyncio>=1.4.1,<2",
+    "pytest-cov>=7.1,<8",
+    "pydantic-extra-types>=2.11.1,<3",
+    "ruff>=0.17.4,<0.18",
+    "ty>=0.0.98,<0.1",
 ]
 
 [tool.pytest.ini_options]

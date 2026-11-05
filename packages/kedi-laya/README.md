@@ -16,7 +16,9 @@ with LayaClient("path/to/checkpoint", backend="mlx") as client:
         state="The duplicate charge has been refunded.",
         schema={
             "type": "object",
-            "properties": {"refunded": {"type": "boolean", "description": "Has the refund been completed?"}},
+            "properties": {
+                "refunded": {"type": "boolean", "description": "Has the refund been completed?"}
+            },
             "required": ["refunded"],
         },
     )

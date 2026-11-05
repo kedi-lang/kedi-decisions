@@ -13,6 +13,9 @@ from kedi_decisions.contracts import (
 )
 from typesafe_sdk import Choice, Noul, NoulAnswer, NoulCriteria, Score, SystemOneResponse
 from typesafe_sdk import ChoiceAnswer as SDKChoiceAnswer
+from typesafe_sdk import ScoreAnswer as SDKScoreAnswer
+
+from .errors import TypeSafeResponseError
 
 
 def question_to_sdk(question: Question) -> Noul | Choice | Score:
@@ -39,12 +42,17 @@ def response_from_sdk(response: SystemOneResponse) -> DecisionResponse:
                 confidence=answer.confidence,
                 probabilities=answer.probabilities,
             )
-        else:
+        elif isinstance(answer, SDKScoreAnswer):
             answers[name] = ScoreAnswer(
                 score=answer.score,
                 confidence=answer.confidence,
                 probabilities=answer.probabilities,
                 legend=answer.legend,
+            )
+        else:
+            # Kedi asks only boolean, choice and score questions (question_to_sdk).
+            raise TypeSafeResponseError(
+                f"TypeSafe returned an unsupported {answer.type!r} answer for {name!r}"
             )
     return DecisionResponse(
         model=response.model,

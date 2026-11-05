@@ -17,8 +17,10 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 from kedi_laya import LayaClient
 
+
 class Route(BaseModel):
     team: Literal["billing", "technical"]
+
 
 with LayaClient("aac6fef/laya-multilingual-mlx") as client:
     agent = Agent(client.as_pydantic_model(), output_type=Route)

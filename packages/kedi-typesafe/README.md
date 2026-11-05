@@ -73,7 +73,9 @@ policy, not a guarantee of 85% empirical accuracy. Version 0.2 changes the legac
 
 ```python
 agent = Agent(TypeSafeModel(threshold=0.9), output_type=Triage)
-result = agent.run_sync("Please refund the duplicate charge", model_settings={"typesafe_threshold": 0.95})
+result = agent.run_sync(
+    "Please refund the duplicate charge", model_settings={"typesafe_threshold": 0.95}
+)
 ```
 
 ## Custom Endpoints
@@ -106,6 +108,7 @@ the classifier's per-invocation questions contract.
 from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 from kedi_typesafe import BooleanCriteria, ChoiceCriteria, Rubric
+
 
 class Review(BaseModel):
     probability: Annotated[
@@ -292,6 +295,7 @@ the decision-metadata API plus an OpenRouter API key.
 from typing import Annotated
 from pydantic import BaseModel
 from kedi_typesafe import Probability, Rubric
+
 
 class Assessment(BaseModel):
     supported_probability: Probability

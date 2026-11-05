@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 import pytest
@@ -37,7 +37,7 @@ from kedi_typesafe.core.evaluation import JSONValue
 from kedi_typesafe.integrations.pydantic import TypeSafeModel, messages_to_state
 
 
-class Route(str, Enum):
+class Route(StrEnum):
     ALLOW = "allow"
     REVIEW = "review"
     DENY = "deny"
