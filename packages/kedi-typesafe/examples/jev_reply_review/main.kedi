@@ -23,7 +23,7 @@ SupportedReply = Annotated[
 
 > model: typesafe/jev-latest
 > settings:
-  typesafe_threshold: 0.85
+  decision_boolean_threshold: 0.85
 
 @supported(reply: str, policy: str) -> bool:
   >> Policy: <policy>

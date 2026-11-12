@@ -59,7 +59,7 @@ async def test_request_threshold_does_not_mutate_shared_model() -> None:
     assert isinstance(model, UpstreamModel)
     agent = Agent(model, output_type=bool)
     low, default = await asyncio.gather(
-        agent.run("claim", model_settings=TypeSafeModelSettings(typesafe_threshold=0.8)),
+        agent.run("claim", model_settings=TypeSafeModelSettings(decision_boolean_threshold=0.8)),
         agent.run("claim"),
     )
     assert low.output is True and default.output is False

@@ -72,7 +72,9 @@ class Client:
 async def test_threshold_overrides_are_concurrent_and_isolated():
     model = TypeSafeChatModel(client=Client())
     high = model.with_structured_output(Output)
-    low = model.model_copy(update={"typesafe_threshold": 0.8}).with_structured_output(Output)
+    low = model.model_copy(update={"decision_boolean_threshold": 0.8}).with_structured_output(
+        Output
+    )
     first, second = await asyncio.gather(high.ainvoke("claim"), low.ainvoke("claim"))
     assert first.supported is False and second.supported is True
     assert model.threshold == 0.85

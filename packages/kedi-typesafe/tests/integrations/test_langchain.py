@@ -135,7 +135,7 @@ def test_plain_langchain_agent_returns_validated_model_and_usage() -> None:
     assert model.asdict() == {
         "model_name": "jev-latest",
         "threshold": 0.85,
-        "typesafe_tool_call_threshold": 0.6,
+        "decision_tool_call_threshold": 0.6,
         "_type": "typesafe-jev",
     }
     assert model.profile is not None and model.profile.get("structured_output") is True

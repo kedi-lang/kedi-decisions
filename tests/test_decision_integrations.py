@@ -92,7 +92,7 @@ for forbidden in ('typesafe_sdk', 'kedi_typesafe', 'pydantic_ai', 'langchain', '
 async def test_pydantic_output_modes_threshold_metadata_and_usage(evaluator, native, stream):
     model = DecisionModel(evaluator)
     agent = Agent(model, output_type=NativeOutput(Review) if native else Review)
-    settings = {"decision_threshold": 0.95}
+    settings = {"decision_boolean_threshold": 0.95}
     if stream:
         async with agent.run_stream("Review this request", model_settings=settings) as result:
             output = await result.get_output()
@@ -189,7 +189,7 @@ async def test_output_handoff_and_threshold_no_selection(evaluator):
 
 @pytest.mark.asyncio
 async def test_langchain_threshold_sync_async_and_metadata(evaluator):
-    model = DecisionChatModel("test-decision", evaluator=evaluator, decision_threshold=0.95)
+    model = DecisionChatModel("test-decision", evaluator=evaluator, decision_boolean_threshold=0.95)
     chain = model.with_structured_output(Review, include_raw=True)
     sync = chain.invoke("Review")
     asynchronous = await chain.ainvoke("Review")

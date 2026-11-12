@@ -122,7 +122,7 @@ class DecisionModel(Model):
         check_allow_model_requests()
         settings, parameters = self.prepare_request(model_settings, model_request_parameters)
         settings = settings or {}
-        unsupported = set(settings) - {"decision_threshold", "decision_tool_call_threshold"}
+        unsupported = set(settings) - {"decision_boolean_threshold", "decision_tool_call_threshold"}
         if unsupported:
             raise UserError(
                 f"DecisionModel does not support model settings: {', '.join(sorted(unsupported))}"
@@ -130,7 +130,7 @@ class DecisionModel(Model):
         if parameters.native_tools:
             raise UserError("Native tools are unsupported by decision models")
         threshold = validate_threshold(
-            settings.get("decision_threshold", self._evaluator.threshold)
+            settings.get("decision_boolean_threshold", self._evaluator.threshold)
         )
         tool_threshold = validate_threshold(settings.get("decision_tool_call_threshold", 0.6))
         native = parameters.output_mode == "native" and parameters.output_object is not None

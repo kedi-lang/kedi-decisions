@@ -107,7 +107,7 @@ explicit MLX alias. These are decision models, not general-purpose agent harness
 Kedi does not attach its implicit artifact toolset to these models.
 
 `> import: decisions` exposes the same shared criteria as `from kedi.decisions import ...`.
-Laya uses `decision_threshold` (default `0.85`, strict greater-than) and
+Laya uses `decision_boolean_threshold` (default `0.85`, strict greater-than) and
 `decision_tool_call_threshold` (default `0.6`). Jev's existing `typesafe_*`
 settings and the standalone provider package APIs are unchanged. Both providers
 use the shared Kedi criteria import instead of provider-specific type modules.

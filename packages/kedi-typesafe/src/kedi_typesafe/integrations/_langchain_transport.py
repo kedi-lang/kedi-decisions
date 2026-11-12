@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Mapping
+from typing import Any
 
 from langchain_typesafe import TypeSafeClassifier
 from langchain_typesafe.types import ClassifierRequest, State
 from langchain_typesafe.types import Question as ClassifierQuestion
 from pydantic import JsonValue, TypeAdapter
-from typesafe_sdk import Question, SystemOneResponse
+from typesafe_sdk import Asset, AsyncTypeSafeClient, Question, SystemOneResponse, TypeSafeClient
 
 from ..core.evaluation import JSONValue
 
@@ -53,6 +54,16 @@ class ClassifierTransport:
                 self._async[loop] = base
         return base.model_copy(update={"model": model or "jev-latest"})
 
+    def _client_options(self, model: str | None) -> dict[str, Any]:
+        return {
+            "api_key": self.api_key
+            if self.api_key is not None
+            else os.environ.get("TYPESAFE_API_KEY", ""),
+            "base_url": self.base_url,
+            "model": model or "jev-latest",
+            "timeout": self.timeout if self.timeout is not None else 30.0,
+        }
+
     @staticmethod
     def _payload(state: JSONValue, questions: Mapping[str, Question]) -> ClassifierRequest:
         return {
@@ -63,8 +74,19 @@ class ClassifierTransport:
         }
 
     async def system_one(
-        self, state: JSONValue, questions: Mapping[str, Question], *, model: str | None = None
+        self,
+        state: JSONValue,
+        questions: Mapping[str, Question],
+        *,
+        model: str | None = None,
+        assets: Mapping[str, Asset] | None = None,
     ) -> SystemOneResponse:
+        if assets:
+            # The classifier takes no assets; images go through the SDK client directly.
+            async with AsyncTypeSafeClient(**self._client_options(model)) as client:
+                return await client.system_one(  # pyright: ignore[reportUnknownMemberType]
+                    state, questions, model=model, assets=assets
+                )
         request = self._request(model, asynchronous=True)
         # Pinned classifier transport avoids double-counting a nested LLM span.
         response = await request._aclassify(self._payload(state, questions))  # pyright: ignore[reportPrivateUsage]
@@ -73,8 +95,18 @@ class ClassifierTransport:
         )
 
     def system_one_sync(
-        self, state: JSONValue, questions: Mapping[str, Question], *, model: str | None = None
+        self,
+        state: JSONValue,
+        questions: Mapping[str, Question],
+        *,
+        model: str | None = None,
+        assets: Mapping[str, Asset] | None = None,
     ) -> SystemOneResponse:
+        if assets:
+            with TypeSafeClient(**self._client_options(model)) as client:
+                return client.system_one(  # pyright: ignore[reportUnknownMemberType]
+                    state, questions, model=model, assets=assets
+                )
         request = self._request(model, asynchronous=False)
         response = request._classify(self._payload(state, questions))  # pyright: ignore[reportPrivateUsage]
         return SystemOneResponse.model_validate_json(
@@ -101,9 +133,14 @@ class SyncClassifierTransport:
         self.transport = transport
 
     def system_one(
-        self, state: JSONValue, questions: Mapping[str, Question], *, model: str | None = None
+        self,
+        state: JSONValue,
+        questions: Mapping[str, Question],
+        *,
+        model: str | None = None,
+        assets: Mapping[str, Asset] | None = None,
     ) -> SystemOneResponse:
-        return self.transport.system_one_sync(state, questions, model=model)
+        return self.transport.system_one_sync(state, questions, model=model, assets=assets)
 
     def close(self) -> None:
         self.transport.close()

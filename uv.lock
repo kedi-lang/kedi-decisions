@@ -707,7 +707,7 @@ wheels = [
 
 [[package]]
 name = "kedi-decisions"
-version = "0.1.4"
+version = "0.1.5"
 source = { editable = "." }
 dependencies = [
     { name = "jsonschema" },
@@ -801,7 +801,7 @@ provides-extras = ["mlx", "torch", "pydantic", "langchain"]
 
 [[package]]
 name = "kedi-typesafe"
-version = "0.3.3"
+version = "0.3.4"
 source = { editable = "packages/kedi-typesafe" }
 dependencies = [
     { name = "kedi-decisions" },

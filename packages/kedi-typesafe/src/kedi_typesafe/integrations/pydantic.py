@@ -13,6 +13,8 @@ from kedi_decisions.routing import ToolCallProposed, prepare_routing, resolve_ro
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.messages import (
+    BinaryContent,
+    ImageUrl,
     ModelMessage,
     ModelResponse,
     ModelResponsePart,
@@ -26,6 +28,7 @@ from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RequestUsage
+from typesafe_sdk import Image
 
 from ..core import CandidateExtractor, TypeSafeEvaluator
 from ..core.evaluation import (
@@ -34,6 +37,7 @@ from ..core.evaluation import (
     JSONValue,
     validate_threshold,
 )
+from ..core.images import with_image_assets
 from ._pydantic_errors import provider_errors
 from ._pydantic_provider import EvaluatorProvider
 from ._pydantic_stream import ExtendedTypeSafeStream
@@ -47,17 +51,26 @@ _PROFILE = ModelProfile(
 )
 
 
-class TypeSafeModelSettings(upstream.TypeSafeModelSettings, total=False):
-    typesafe_threshold: float
-    """Strict probability threshold for bools and label membership; default 0.85."""
+TypeSafeModelSettings = upstream.TypeSafeModelSettings
 
 
 def messages_to_state(messages: list[ModelMessage]) -> JSONValue:
     """Use the pinned upstream projection, including tool and retry history."""
-    state = decision_model._map_messages(messages, turn=False, images=None)
+    return messages_to_request(messages)[0]
+
+
+def messages_to_request(messages: list[ModelMessage]) -> tuple[JSONValue, dict[str, Image]]:
+    """Project the messages into Jev state and the images it references as assets."""
+    images: list[BinaryContent | ImageUrl] = []
+    state = decision_model._map_messages(messages, turn=False, images=images)
     if not isinstance(state, (str, list, dict)):
         raise TypeError("Decision history must map to text or structured state")
-    return state
+    data: list[bytes] = []
+    for image in images:
+        if isinstance(image, ImageUrl):
+            raise UserError("TypeSafe reads image data, not URLs: download the image first")
+        data.append(image.data)
+    return with_image_assets(state, data)
 
 
 class TypeSafeModel(upstream.TypeSafeModel):
@@ -113,15 +126,15 @@ class TypeSafeModel(upstream.TypeSafeModel):
         # Keep Kedi's strict thresholds instead of upstream's changed routing defaults.
         settings, parameters = Model.prepare_request(self, model_settings, model_request_parameters)
         settings = settings or {}
-        unsupported = set(settings) - {"typesafe_threshold", "typesafe_tool_call_threshold"}
+        unsupported = set(settings) - {"decision_boolean_threshold", "decision_tool_call_threshold"}
         if unsupported:
             raise UserError(
                 f"TypeSafeModel does not support model settings: {', '.join(sorted(unsupported))}"
             )
         threshold = validate_threshold(
-            settings.get("typesafe_threshold", self._evaluator.threshold)
+            settings.get("decision_boolean_threshold", self._evaluator.threshold)
         )
-        tool_threshold = validate_threshold(settings.get("typesafe_tool_call_threshold", 0.6))
+        tool_threshold = validate_threshold(settings.get("decision_tool_call_threshold", 0.6))
         native = parameters.output_mode == "native" and parameters.output_object is not None
         if parameters.allow_text_output and not native:
             raise UserError("Text output is not supported by TypeSafeModel")
@@ -150,7 +163,7 @@ class TypeSafeModel(upstream.TypeSafeModel):
                 ],
             ],
         )
-        state = messages_to_state(messages)
+        state, assets = messages_to_request(messages)
         instructions = "\n\n".join(
             part.content for part in (self._get_instruction_parts(messages, parameters) or [])
         )
@@ -175,7 +188,7 @@ class TypeSafeModel(upstream.TypeSafeModel):
         )
         with provider_errors(self.model_name):
             result = await self._evaluator.evaluate(
-                state=state, schema=route.schema, threshold=threshold
+                state=state, schema=route.schema, threshold=threshold, assets=assets
             )
         try:
             result, call = resolve_routing(result, route, tool_threshold)
@@ -238,4 +251,4 @@ class TypeSafeModel(upstream.TypeSafeModel):
         await self.aclose()
 
 
-__all__ = ["TypeSafeModel", "TypeSafeModelSettings", "messages_to_state"]
+__all__ = ["TypeSafeModel", "TypeSafeModelSettings", "messages_to_request", "messages_to_state"]

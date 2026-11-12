@@ -103,18 +103,18 @@ class DecisionChatModel(BaseChatModel):
     """LangChain projection over a provider-neutral typed-decision evaluator."""
 
     kedi_prompt_mode: ClassVar[Literal["decision"]] = "decision"
-    threshold_setting: ClassVar[str] = "decision_threshold"
+    threshold_setting: ClassVar[str] = "decision_boolean_threshold"
     tool_threshold_setting: ClassVar[str] = "decision_tool_call_threshold"
     metadata_key: ClassVar[str] = "decisions"
 
     model_name: str
     threshold: float = DEFAULT_THRESHOLD
-    decision_threshold: float | None = None
+    decision_boolean_threshold: float | None = None
     decision_tool_call_threshold: float = 0.6
     _evaluator: Evaluator = PrivateAttr()
 
     @field_validator(
-        "threshold", "decision_threshold", "decision_tool_call_threshold", mode="before"
+        "threshold", "decision_boolean_threshold", "decision_tool_call_threshold", mode="before"
     )
     @classmethod
     def _validate_threshold(cls, value: Any) -> float:
@@ -174,7 +174,7 @@ class DecisionChatModel(BaseChatModel):
         schema = self._request_schema(stop=stop, kwargs=kwargs)
         request = prepare_routing(schema, tools, messages)
         result = self._evaluator.evaluate_sync(
-            state=messages_to_state(messages),
+            **self._evaluation_input(messages),
             schema=request.schema,
             threshold=threshold,
         )
@@ -204,7 +204,7 @@ class DecisionChatModel(BaseChatModel):
         schema = self._request_schema(stop=stop, kwargs=kwargs)
         request = prepare_routing(schema, tools, messages)
         result = await self._evaluator.evaluate(
-            state=messages_to_state(messages),
+            **self._evaluation_input(messages),
             schema=request.schema,
             threshold=threshold,
         )
@@ -299,6 +299,10 @@ class DecisionChatModel(BaseChatModel):
     ) -> bool | None:
         await self.aclose()
         return None
+
+    def _evaluation_input(self, messages: list[BaseMessage]) -> dict[str, Any]:
+        """Evaluator arguments for the messages: the decision state."""
+        return {"state": messages_to_state(messages)}
 
     @staticmethod
     def _request_schema(

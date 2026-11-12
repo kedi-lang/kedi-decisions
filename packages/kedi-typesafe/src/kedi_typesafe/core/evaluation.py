@@ -10,6 +10,7 @@ from typing import Any, Protocol, TypeAlias
 
 from kedi_decisions.evaluation import EvaluationResult, ResultDecoder
 from typesafe_sdk import (
+    Asset,
     AsyncTypeSafeClient,
     Question,
     SystemOneResponse,
@@ -100,6 +101,7 @@ class AsyncSystemOneClient(Protocol):
         questions: Mapping[str, Question],
         *,
         model: str | None = None,
+        assets: Mapping[str, Asset] | None = None,
     ) -> SystemOneResponse: ...
 
     async def aclose(self) -> None: ...
@@ -112,6 +114,7 @@ class SystemOneClient(Protocol):
         questions: Mapping[str, Question],
         *,
         model: str | None = None,
+        assets: Mapping[str, Asset] | None = None,
     ) -> SystemOneResponse: ...
 
     def close(self) -> None: ...
@@ -161,6 +164,7 @@ class TypeSafeEvaluator(ResultDecoder):
         state: JSONValue,
         schema: Mapping[str, Any],
         threshold: float | None = None,
+        assets: Mapping[str, Asset] | None = None,
     ) -> EvaluationResult:
         plan = self._plan(state, schema)
         effective_threshold = self.threshold if threshold is None else validate_threshold(threshold)
@@ -180,10 +184,11 @@ class TypeSafeEvaluator(ResultDecoder):
                 request_metadata=request_metadata,
             )
         client = self.async_client()
-        response = await client.system_one(
-            state,
-            plan.native_questions(),
-            model=self.model_name,
+        questions = plan.native_questions()
+        response = await (
+            client.system_one(state, questions, model=self.model_name, assets=assets)
+            if assets
+            else client.system_one(state, questions, model=self.model_name)
         )
         return self._result(
             response,
@@ -214,6 +219,7 @@ class TypeSafeEvaluator(ResultDecoder):
         state: JSONValue,
         schema: Mapping[str, Any],
         threshold: float | None = None,
+        assets: Mapping[str, Asset] | None = None,
     ) -> EvaluationResult:
         plan = self._plan(state, schema)
         effective_threshold = self.threshold if threshold is None else validate_threshold(threshold)
@@ -242,10 +248,15 @@ class TypeSafeEvaluator(ResultDecoder):
             )
             self._sync_client = client
         # TypeSafe SDK 0.7.2 exposes a partially unknown recursive JSON annotation.
-        response = client.system_one(  # pyright: ignore[reportUnknownMemberType]
-            state,
-            plan.native_questions(),
-            model=self.model_name,
+        questions = plan.native_questions()
+        response = (
+            client.system_one(  # pyright: ignore[reportUnknownMemberType]
+                state, questions, model=self.model_name, assets=assets
+            )
+            if assets
+            else client.system_one(  # pyright: ignore[reportUnknownMemberType]
+                state, questions, model=self.model_name
+            )
         )
         return self._result(
             response,

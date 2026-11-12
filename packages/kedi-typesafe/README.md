@@ -61,21 +61,32 @@ model = TypeSafeModel(
 
 Candidate extraction is deterministic and Jev only selects among values found in state, following
 TypeSafe's pre-parsed extraction pattern. Jev is not a free-form text-generation model, so
-unconstrained strings, arbitrary numeric extraction, recursive schemas, media, and omitted/defaulted
-fields are rejected before a provider request is made. Nullable choices and extraction are supported:
+unconstrained strings, arbitrary numeric extraction, recursive schemas, media other than images, and
+omitted/defaulted fields are rejected before a provider request is made. Nullable choices and extraction are supported:
 no-match is an explicit option, not a confidence cutoff. Missing candidates resolve locally to `None`
 only for nullable extraction. Provider failures remain exceptions.
 
 Boolean answers use Jev's Noul probability and a configurable threshold. The default decision is
 strictly `probability > 0.85`; equality is false. Pass `threshold=...` to either model constructor,
-or `typesafe_threshold` per request to override it without mutating the model. This is a decision
+or `decision_boolean_threshold` per request to override it without mutating the model. This is a decision
 policy, not a guarantee of 85% empirical accuracy. Version 0.2 changes the legacy default of 0.5.
 
 ```python
 agent = Agent(TypeSafeModel(threshold=0.9), output_type=Triage)
 result = agent.run_sync(
-    "Please refund the duplicate charge", model_settings={"typesafe_threshold": 0.95}
+    "Please refund the duplicate charge", model_settings={"decision_boolean_threshold": 0.95}
 )
+```
+
+### Images
+
+Images in a prompt reach Jev as TypeSafe image assets: the decision state refers to each one, and
+the request uploads its bytes once. Pydantic AI `BinaryContent` images and LangChain `image` blocks
+with `base64` data are supported; image URLs are rejected, so download them first. With the
+LangChain transport, a request carrying images goes through the TypeSafe SDK client.
+
+```python
+result = agent.run_sync(["Is this receipt legible?", BinaryContent(png, media_type="image/png")])
 ```
 
 ## Custom Endpoints
@@ -196,7 +207,7 @@ print(result["structured_response"])
 `TypeSafeChatModel.with_structured_output(...)` is also supported for direct LangChain model use.
 The same Jev schema restrictions described above apply. Free-form invocation, media,
 stop sequences, and unsupported model settings fail before a provider request. Tool and retry
-history are retained. Set `typesafe_threshold` in `.bind(...)` or a request-local model copy.
+history are retained. Set `decision_boolean_threshold` in `.bind(...)` or a request-local model copy.
 
 ## Explicit Tool Routing
 
@@ -207,7 +218,7 @@ Use an explicit downstream handler or Pydantic AI `FallbackModel` if desired; th
 not silently call another model. LangChain exports its proposal from
 `kedi_typesafe.integrations.langchain`.
 
-`typesafe_tool_call_threshold` controls routing independently (default 0.6, upstream semantics).
+`decision_tool_call_threshold` controls routing independently (default 0.6, upstream semantics).
 Provide a meaningful output model docstring or agent instructions for Pydantic routing.
 The routing decision is another question in the same batch, not another provider request.
 Routing is not authorization: never treat a positive Jev assessment as permission to bypass
