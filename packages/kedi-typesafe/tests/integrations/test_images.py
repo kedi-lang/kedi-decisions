@@ -54,6 +54,7 @@ class SyncClient(Client):
 
 
 def _single_asset(kwargs: dict[str, Any]) -> tuple[str, Image]:
+    assert kwargs["extra_headers"] == {"TypeSafe-Danger-Zone-Images": "true"}
     [(reference, image)] = kwargs["assets"].items()
     return reference, image
 
@@ -77,6 +78,7 @@ def test_text_only_requests_send_no_assets() -> None:
 
     [(_, _, kwargs)] = client.calls
     assert "assets" not in kwargs
+    assert "extra_headers" not in kwargs
 
 
 def test_image_urls_must_be_downloaded_first() -> None:

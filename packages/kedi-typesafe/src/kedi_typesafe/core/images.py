@@ -10,6 +10,9 @@ from typesafe_sdk import Image
 
 _LABEL = re.compile(r"<image (\d+)>")
 
+IMAGE_HEADERS = {"TypeSafe-Danger-Zone-Images": "true"}
+"""TypeSafe image input is experimental; requests that carry images opt in with this header."""
+
 
 def with_image_assets(state: Any, images: Sequence[bytes]) -> tuple[Any, dict[str, Image]]:
     """Replace each `<image N>` label in the state with the reference of the Nth image."""

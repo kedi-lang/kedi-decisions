@@ -801,7 +801,7 @@ provides-extras = ["mlx", "torch", "pydantic", "langchain"]
 
 [[package]]
 name = "kedi-typesafe"
-version = "0.3.4"
+version = "0.3.5"
 source = { editable = "packages/kedi-typesafe" }
 dependencies = [
     { name = "kedi-decisions" },

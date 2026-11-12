@@ -80,12 +80,13 @@ class ClassifierTransport:
         *,
         model: str | None = None,
         assets: Mapping[str, Asset] | None = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> SystemOneResponse:
         if assets:
             # The classifier takes no assets; images go through the SDK client directly.
             async with AsyncTypeSafeClient(**self._client_options(model)) as client:
                 return await client.system_one(  # pyright: ignore[reportUnknownMemberType]
-                    state, questions, model=model, assets=assets
+                    state, questions, model=model, assets=assets, extra_headers=extra_headers
                 )
         request = self._request(model, asynchronous=True)
         # Pinned classifier transport avoids double-counting a nested LLM span.
@@ -101,11 +102,12 @@ class ClassifierTransport:
         *,
         model: str | None = None,
         assets: Mapping[str, Asset] | None = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> SystemOneResponse:
         if assets:
             with TypeSafeClient(**self._client_options(model)) as client:
                 return client.system_one(  # pyright: ignore[reportUnknownMemberType]
-                    state, questions, model=model, assets=assets
+                    state, questions, model=model, assets=assets, extra_headers=extra_headers
                 )
         request = self._request(model, asynchronous=False)
         response = request._classify(self._payload(state, questions))  # pyright: ignore[reportPrivateUsage]
@@ -139,8 +141,11 @@ class SyncClassifierTransport:
         *,
         model: str | None = None,
         assets: Mapping[str, Asset] | None = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> SystemOneResponse:
-        return self.transport.system_one_sync(state, questions, model=model, assets=assets)
+        return self.transport.system_one_sync(
+            state, questions, model=model, assets=assets, extra_headers=extra_headers
+        )
 
     def close(self) -> None:
         self.transport.close()

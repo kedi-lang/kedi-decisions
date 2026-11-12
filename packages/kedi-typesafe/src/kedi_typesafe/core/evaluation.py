@@ -19,6 +19,7 @@ from typesafe_sdk import (
 )
 
 from .extraction import CandidateExtractor
+from .images import IMAGE_HEADERS
 from .schema import EvaluationPlan, build_evaluation_plan
 from .transport import response_from_sdk
 
@@ -102,6 +103,7 @@ class AsyncSystemOneClient(Protocol):
         *,
         model: str | None = None,
         assets: Mapping[str, Asset] | None = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> SystemOneResponse: ...
 
     async def aclose(self) -> None: ...
@@ -115,6 +117,7 @@ class SystemOneClient(Protocol):
         *,
         model: str | None = None,
         assets: Mapping[str, Asset] | None = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> SystemOneResponse: ...
 
     def close(self) -> None: ...
@@ -186,7 +189,13 @@ class TypeSafeEvaluator(ResultDecoder):
         client = self.async_client()
         questions = plan.native_questions()
         response = await (
-            client.system_one(state, questions, model=self.model_name, assets=assets)
+            client.system_one(
+                state,
+                questions,
+                model=self.model_name,
+                assets=assets,
+                extra_headers=IMAGE_HEADERS,
+            )
             if assets
             else client.system_one(state, questions, model=self.model_name)
         )
@@ -251,7 +260,11 @@ class TypeSafeEvaluator(ResultDecoder):
         questions = plan.native_questions()
         response = (
             client.system_one(  # pyright: ignore[reportUnknownMemberType]
-                state, questions, model=self.model_name, assets=assets
+                state,
+                questions,
+                model=self.model_name,
+                assets=assets,
+                extra_headers=IMAGE_HEADERS,
             )
             if assets
             else client.system_one(  # pyright: ignore[reportUnknownMemberType]
