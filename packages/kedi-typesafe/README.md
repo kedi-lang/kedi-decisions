@@ -85,8 +85,8 @@ the request uploads its bytes once. Pydantic AI `BinaryContent` images and LangC
 with `base64` data are supported; image URLs are rejected, so download them first. With the
 LangChain transport, a request carrying images goes through the TypeSafe SDK client.
 TypeSafe image input is experimental: requests that carry images send the
-`TypeSafe-Danger-Zone-Images: true` header to opt in. The API rejects images it considers too small
-(a 64×64 PNG fails with "Invalid image dimensions"; 512×512 works).
+`TypeSafe-Danger-Zone-Images: true` header to opt in. TypeSafe takes PNG or JPEG images of
+16 MiB at most, each side 280 to 1568 pixels: see https://docs.typesafe.ai/images.
 
 ```python
 result = agent.run_sync(["Is this receipt legible?", BinaryContent(png, media_type="image/png")])
