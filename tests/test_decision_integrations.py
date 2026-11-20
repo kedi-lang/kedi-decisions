@@ -200,6 +200,23 @@ async def test_langchain_threshold_sync_async_and_metadata(evaluator):
     assert model._identifying_params["threshold"] == 0.95
 
 
+def test_root_typesafe_pin_matches_workspace_version():
+    """The root typesafe extra must pin the kedi-typesafe version the workspace
+    actually ships (audit #215 D7)."""
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    root_pyproject = tomllib.loads((root / "pyproject.toml").read_text())
+    workspace_pyproject = tomllib.loads(
+        (root / "packages/kedi-typesafe/pyproject.toml").read_text()
+    )
+    version = workspace_pyproject["project"]["version"]
+    assert root_pyproject["project"]["optional-dependencies"]["typesafe"] == [
+        f"kedi-typesafe=={version}"
+    ]
+
+
 def test_explicit_none_boolean_threshold_is_accepted(evaluator):
     """An explicit decision_boolean_threshold=None is valid, like omitting it
     (audit #215 D5)."""
