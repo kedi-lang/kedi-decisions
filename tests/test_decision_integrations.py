@@ -293,6 +293,39 @@ async def test_async_client_is_required():
 
 
 @pytest.mark.asyncio
+async def test_all_hand_offs_completed_raises_user_error():
+    """When every hand-off tool has already run, the model reports that no
+    hand-off was selected instead of failing the empty plan build
+    (audit #215 D4)."""
+    from pydantic_ai.messages import ToolReturnPart
+    from pydantic_ai.tools import ToolDefinition
+
+    class GuardClient:
+        media_kinds = frozenset()
+        probability_decimals = None
+
+        async def decide(self, *args, **kwargs):
+            raise AssertionError("the client must not be reached")
+
+    model = DecisionModel(DecisionEvaluator("fake", client=GuardClient()))
+    handoff = ToolDefinition(
+        name="lookup",
+        description="Look it up",
+        parameters_json_schema={"type": "object", "properties": {}},
+    )
+    messages = [
+        ModelRequest(parts=[UserPromptPart(content="look it up")]),
+        ModelResponse(parts=[ToolCallPart("lookup", {}, tool_call_id="c1")]),
+        ModelRequest(parts=[ToolReturnPart("lookup", "done", tool_call_id="c1")]),
+    ]
+    parameters = ModelRequestParameters(
+        allow_text_output=False, output_tools=[], function_tools=[handoff]
+    )
+    with pytest.raises(UserError, match="above the threshold"):
+        await model.request(messages, None, parameters)
+
+
+@pytest.mark.asyncio
 async def test_media_bytes_change_state_and_request_fingerprints():
     """Different image bytes give different fingerprints, identical bytes give
     identical ones, and media-free requests keep their fingerprints (audit #215 D2)."""
