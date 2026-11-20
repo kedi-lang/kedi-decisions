@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Callable, Mapping, Sequence
 from types import TracebackType
@@ -24,6 +25,7 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import PrivateAttr, TypeAdapter, field_validator
 
+from ..contracts import DecisionMedia
 from ..evaluation import (
     DEFAULT_THRESHOLD,
     Evaluator,
@@ -42,9 +44,17 @@ _PROFILE = {
 }
 
 
-def messages_to_state(messages: list[BaseMessage]) -> JSONValue:
-    """Project supported LangChain message history into structured Decision state."""
+def messages_to_state(
+    messages: list[BaseMessage], *, media: list[DecisionMedia] | None = None
+) -> JSONValue:
+    """Project supported LangChain message history into structured Decision state.
 
+    With a `media` list, base64 image, audio and video blocks in user messages are collected
+    into it and the state refers to each by a label such as `<image 1>`.
+    """
+
+    if media is not None:
+        messages = [_with_media_labels(message, media) for message in messages]
     rendered: list[JSONValue] = []
     for message in messages:
         if isinstance(message, AIMessage) and message.invalid_tool_calls:
@@ -70,6 +80,33 @@ def messages_to_state(messages: list[BaseMessage]) -> JSONValue:
     if not rendered:
         raise ValueError("DecisionChatModel requires at least one supported text message")
     return {"messages": convert_to_openai_messages(messages)}
+
+
+_MEDIA_BLOCKS = {"image": "image", "audio": "audio", "video": "video"}
+
+
+def _with_media_labels(message: BaseMessage, media: list[DecisionMedia]) -> BaseMessage:
+    if not isinstance(message, HumanMessage) or isinstance(message.content, str):
+        return message
+    content: list[Any] = []
+    for item in message.content:
+        block = cast(dict[str, Any], item) if isinstance(item, Mapping) else None
+        kind = _MEDIA_BLOCKS.get(block.get("type", "")) if block is not None else None
+        if block is None or kind is None:
+            content.append(item)
+            continue
+        if not isinstance(block.get("base64"), str):
+            _unsupported_message(f"{kind} block without base64 data; load the file first")
+        media.append(
+            DecisionMedia(
+                kind=cast(Any, kind),
+                data=base64.b64decode(block["base64"]),
+                media_type=block.get("mime_type"),
+            )
+        )
+        label = f"<{kind} {sum(m.kind == kind for m in media)}>"
+        content.append({"type": "text", "text": label})
+    return message.model_copy(update={"content": content})
 
 
 def _text_content(message: BaseMessage) -> str:
@@ -301,8 +338,17 @@ class DecisionChatModel(BaseChatModel):
         return None
 
     def _evaluation_input(self, messages: list[BaseMessage]) -> dict[str, Any]:
-        """Evaluator arguments for the messages: the decision state."""
-        return {"state": messages_to_state(messages)}
+        """Evaluator arguments for the messages: the decision state, and its media when the
+        evaluator reads media."""
+        kinds: frozenset[str] = getattr(self._evaluator, "media_kinds", frozenset())
+        if not kinds:
+            return {"state": messages_to_state(messages)}
+        media: list[DecisionMedia] = []
+        state = messages_to_state(messages, media=media)
+        unsupported = sorted({m.kind for m in media} - kinds)
+        if unsupported:
+            _unsupported_message(f"{', '.join(unsupported)} input")
+        return {"state": state, "media": tuple(media)} if media else {"state": state}
 
     @staticmethod
     def _request_schema(

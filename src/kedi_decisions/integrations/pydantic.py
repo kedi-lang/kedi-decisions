@@ -10,6 +10,9 @@ from typing import Any, ClassVar, Literal
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.messages import (
+    AudioUrl,
+    BinaryContent,
+    ImageUrl,
     ModelMessage,
     ModelRequest,
     ModelResponse,
@@ -19,6 +22,7 @@ from pydantic_ai.messages import (
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
+    VideoUrl,
 )
 from pydantic_ai.models import (
     Model,
@@ -31,23 +35,27 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RequestUsage
 
+from ..contracts import DecisionMedia
 from ..evaluation import DecisionEvaluator, JSONValue, validate_threshold
 from ..routing import prepare_routing, resolve_routing
 from ._pydantic_stream import DecisionStream
 
 
-def messages_to_state(messages: list[ModelMessage]) -> JSONValue:
+def messages_to_state(
+    messages: list[ModelMessage], *, media: list[DecisionMedia] | None = None
+) -> JSONValue:
+    """Project messages into decision state. With a `media` list, prompt images, audio and video
+    are collected into it and the state refers to each by a label such as `<image 1>`."""
     history: list[dict[str, Any]] = []
     text: list[str] = []
     for message in messages:
         for part in message.parts:
             if isinstance(part, UserPromptPart):
-                if not isinstance(part.content, str):
-                    raise UserError("Decision models require text-only user input")
+                content = _user_content(part, media)
                 if message is messages[-1]:
-                    text.append(part.content)
+                    text.append(content)
                 else:
-                    history.append({"role": "user", "content": part.content})
+                    history.append({"role": "user", "content": content})
             elif isinstance(part, (SystemPromptPart, TextPart)):
                 history.append(
                     {
@@ -83,6 +91,32 @@ def messages_to_state(messages: list[ModelMessage]) -> JSONValue:
     if not joined and not history:
         raise UserError("Decision models require input to evaluate")
     return {"history": history, "text": joined} if history else joined
+
+
+def _user_content(part: UserPromptPart, media: list[DecisionMedia] | None) -> str:
+    if isinstance(part.content, str):
+        return part.content
+    if media is None:
+        raise UserError("Decision models require text-only user input")
+    pieces: list[str] = []
+    for item in part.content:
+        if isinstance(item, str):
+            pieces.append(item)
+        elif isinstance(item, (ImageUrl, AudioUrl, VideoUrl)):
+            raise UserError("Decision models read media data, not URLs: load the file first")
+        elif isinstance(item, BinaryContent) and (item.is_image or item.is_audio or item.is_video):
+            kind = "image" if item.is_image else "audio" if item.is_audio else "video"
+            media.append(DecisionMedia(kind=kind, data=item.data, media_type=item.media_type))
+            pieces.append(f"<{kind} {sum(m.kind == kind for m in media)}>")
+        else:
+            raise UserError(f"Decision models do not read {type(item).__name__} input")
+    return "\n".join(pieces)
+
+
+def check_media_kinds(media: list[DecisionMedia], kinds: frozenset[str], model_name: str) -> None:
+    unsupported = sorted({m.kind for m in media} - kinds)
+    if unsupported:
+        raise UserError(f"Decision model {model_name} does not read {', '.join(unsupported)} input")
 
 
 class DecisionModel(Model):
@@ -170,7 +204,10 @@ class DecisionModel(Model):
             completed.update(
                 part.tool_name for part in message.parts if isinstance(part, ToolReturnPart)
             )
-        state = messages_to_state(messages)
+        kinds: frozenset[str] = getattr(self._evaluator, "media_kinds", frozenset())
+        media: list[DecisionMedia] | None = [] if kinds else None
+        state = messages_to_state(messages, media=media)
+        check_media_kinds(media or [], kinds, self.model_name)
         instructions = "\n\n".join(
             part.content for part in (self._get_instruction_parts(messages, parameters) or [])
         )
@@ -195,7 +232,7 @@ class DecisionModel(Model):
             allow_final=output is not None,
         )
         result = await self._evaluator.evaluate(
-            state=state, schema=route.schema, threshold=threshold
+            state=state, schema=route.schema, threshold=threshold, media=media or ()
         )
         result, call = resolve_routing(result, route, tool_threshold)
         if call is not None:

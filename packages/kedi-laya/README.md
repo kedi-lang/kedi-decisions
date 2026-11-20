@@ -36,6 +36,12 @@ failing selected runtimes raise an error; there is no inference-error fallback
 to another backend. Weights load lazily once per client. The provider identifier
 is always `laya`, and `model.backend` reports the selected runtime.
 
+Laya's engine checkpoint `vega` (laya 0.5+, PyTorch) also reads one prompt image,
+audio or video per decision: Pydantic AI `BinaryContent` and LangChain base64
+blocks are passed to it with the prompt text as question context, and text-only
+checkpoints reject media with the reason.
+See [docs/LAYA.md](../../docs/LAYA.md#images-audio-and-video).
+
 MLX-owned models are checked against the actual tokenizer and context budget
 before inference. Injected predictors and Torch retain their own context
 handling. Real inference has been verified on the multilingual MLX checkpoint;

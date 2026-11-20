@@ -4,9 +4,22 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol, TypeAlias
+from typing import Any, Literal, Protocol, TypeAlias
 
 JSONValue: TypeAlias = str | int | float | bool | None | Sequence[Any] | Mapping[str, Any]
+
+
+MediaKind: TypeAlias = Literal["image", "audio", "video"]
+
+
+@dataclass(frozen=True, kw_only=True)
+class DecisionMedia:
+    """One image, audio or video value from the prompt. The state refers to it by its label,
+    such as `<image 1>`, in prompt order per kind."""
+
+    kind: MediaKind
+    data: bytes
+    media_type: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

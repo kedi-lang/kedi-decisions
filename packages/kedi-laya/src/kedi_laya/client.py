@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import io
+import json
 import platform
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from importlib import import_module
 from importlib.util import find_spec
 from threading import RLock
@@ -15,6 +18,7 @@ from kedi_decisions import DecisionEvaluator
 from kedi_decisions.contracts import (
     BooleanQuestion,
     ChoiceQuestion,
+    DecisionMedia,
     DecisionResponse,
     DecisionUsage,
     JSONValue,
@@ -24,9 +28,17 @@ from kedi_decisions.evaluation import DEFAULT_THRESHOLD
 
 from ._response import parse_response
 
+ENGINE_MODEL = "vega"
+"""Laya's engine (`laya.load(vegaml=True)`, laya 0.5+): text, images, audio and video. Pick
+another reader with `load_options={"vegaml": "4b"}`."""
+
 
 class LayaPredictor(Protocol):
-    """Implemented by Laya, Laya-MLX, or a compatible user-supplied predictor."""
+    """Implemented by Laya, Laya-MLX, or a compatible user-supplied predictor.
+
+    Laya's engine (`laya.load(vegaml=True)`, the default model since laya 0.5) also takes
+    `image=`, `audio=` and `video=`; the text encoders do not.
+    """
 
     def predict(self, state: Any, questions: dict[str, Any]) -> dict[str, Any]: ...
 
@@ -39,6 +51,8 @@ class LayaClient:
     """
 
     probability_decimals = 4
+    media_kinds = frozenset({"image", "audio", "video"})
+    """Laya reads one image, audio or video per decision, with its engine model."""
 
     def __init__(
         self,
@@ -80,6 +94,7 @@ class LayaClient:
         questions: Mapping[str, Question],
         *,
         model: str | None = None,
+        media: Sequence[DecisionMedia] = (),
     ) -> DecisionResponse:
         if model is not None and model != self.model_name:
             raise ValueError("The request model does not match the loaded Laya client")
@@ -117,12 +132,23 @@ class LayaClient:
                     raise ModuleNotFoundError(
                         f"Install the optional local runtime: pip install 'kedi-decisions[{extra}]'"
                     ) from exc
-                self._predictor = runtime.load(self.model_name, **self._load_options)
+                self._predictor = (
+                    runtime.load(**{"vegaml": True, **self._load_options})
+                    if self.model_name == ENGINE_MODEL
+                    else runtime.load(self.model_name, **self._load_options)
+                )
             if self.backend == "mlx" and not self._borrowed:
                 from ._mlx_context import check_mlx_context
 
                 check_mlx_context(self._predictor, state, payload)
-            response = self._predictor.predict(state, payload)
+            if media:
+                # Laya's engine reads exactly one input: the text state, or one media value.
+                # With media, the prompt text becomes context in each question.
+                response = self._predictor.predict(
+                    None, _with_context(payload, state), **_media_argument(self._predictor, media)
+                )
+            else:
+                response = self._predictor.predict(state, payload)
         return parse_response(response, model=self.model_name, expected=set(payload))
 
     def as_evaluator(self, *, threshold: float = DEFAULT_THRESHOLD) -> DecisionEvaluator:
@@ -159,6 +185,42 @@ class LayaClient:
         self.close()
 
 
+def _media_argument(predictor: LayaPredictor, media: Sequence[DecisionMedia]) -> dict[str, Any]:
+    if len(media) > 1:
+        raise ValueError("Laya's engine reads one image, audio or video per decision")
+    [item] = media
+    if item.kind not in inspect.signature(predictor.predict).parameters:
+        raise ValueError(
+            f"This Laya model reads text only; load Laya's engine for {item.kind} input "
+            "(the vega checkpoint)"
+        )
+    return {item.kind: _image(item.data) if item.kind == "image" else item.data}
+
+
+def _with_context(payload: dict[str, Any], state: JSONValue) -> dict[str, Any]:
+    context = state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)
+    return {
+        name: {
+            **question,
+            "instructions": "\n\n".join(
+                part for part in (context, question["instructions"]) if part
+            ),
+        }
+        for name, question in payload.items()
+    }
+
+
+def _image(data: bytes) -> Any:
+    try:
+        from PIL import Image
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "Install Laya's vision extra for image input: pip install 'laya[vision]'"
+        ) from exc
+    with Image.open(io.BytesIO(data)) as image:
+        return image.convert("RGB")
+
+
 class AsyncLayaClient:
     """Offload local inference without blocking the agent's event loop."""
 
@@ -166,6 +228,7 @@ class AsyncLayaClient:
 
     def __init__(self, client: LayaClient) -> None:
         self.client = client
+        self.media_kinds = client.media_kinds
         self.provider_name = client.provider_name
         self.base_url = client.base_url
 
@@ -175,10 +238,13 @@ class AsyncLayaClient:
         questions: Mapping[str, Question],
         *,
         model: str | None = None,
+        media: Sequence[DecisionMedia] = (),
     ) -> DecisionResponse:
         # Cancellation does not stop a running native kernel. The client's lock
         # remains held by the worker until inference really finishes.
-        return await asyncio.to_thread(self.client.decide, state, questions, model=model)
+        return await asyncio.to_thread(
+            self.client.decide, state, questions, model=model, media=media
+        )
 
     async def aclose(self) -> None:
         await asyncio.to_thread(self.client.close)

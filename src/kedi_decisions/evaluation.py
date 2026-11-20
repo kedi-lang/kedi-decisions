@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -15,6 +15,7 @@ from .contracts import (
     BooleanAnswer,
     ChoiceAnswer,
     DecisionClient,
+    DecisionMedia,
     DecisionResponse,
     DecisionUsage,
     JSONValue,
@@ -323,6 +324,11 @@ class ResultDecoder:
         }
 
 
+def _media_arguments(media: Sequence[DecisionMedia]) -> dict[str, Any]:
+    """Clients that read media take `media=`; text-only clients keep their signature."""
+    return {"media": tuple(media)} if media else {}
+
+
 class DecisionEvaluator(ResultDecoder):
     """Execute validated Decision question plans and normalize their typed answers."""
 
@@ -346,6 +352,10 @@ class DecisionEvaluator(ResultDecoder):
         self._borrowed_client = client
         self._sync_client = sync_client
         self._probability_decimals = getattr(client or sync_client, "probability_decimals", None)
+        self.media_kinds: frozenset[str] = frozenset(
+            getattr(client or sync_client, "media_kinds", ())
+        )
+        """Media kinds the client reads; prompts with other media are rejected before a call."""
         self._provider_name = provider_name
         self._base_url = base_url
 
@@ -363,6 +373,7 @@ class DecisionEvaluator(ResultDecoder):
         state: JSONValue,
         schema: Mapping[str, Any],
         threshold: float | None = None,
+        media: Sequence[DecisionMedia] = (),
     ) -> EvaluationResult:
         plan = self._plan(state, schema)
         effective_threshold = self.threshold if threshold is None else validate_threshold(threshold)
@@ -388,6 +399,7 @@ class DecisionEvaluator(ResultDecoder):
             state,
             plan.decision_questions(),
             model=self.model_name,
+            **_media_arguments(media),
         )
         return self._decode_result(
             response,
@@ -407,6 +419,7 @@ class DecisionEvaluator(ResultDecoder):
         state: JSONValue,
         schema: Mapping[str, Any],
         threshold: float | None = None,
+        media: Sequence[DecisionMedia] = (),
     ) -> EvaluationResult:
         plan = self._plan(state, schema)
         effective_threshold = self.threshold if threshold is None else validate_threshold(threshold)
@@ -434,6 +447,7 @@ class DecisionEvaluator(ResultDecoder):
             state,
             plan.decision_questions(),
             model=self.model_name,
+            **_media_arguments(media),
         )
         return self._decode_result(
             response,

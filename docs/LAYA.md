@@ -68,6 +68,32 @@ Reuse a client/model for a session instead of constructing it per decision.
 It never calls `close` on a caller-owned predictor. Closing an evaluator does
 not close the borrowed client: the client owner controls its lifetime.
 
+## Images, audio and video
+
+Laya's engine (`laya.load(vegaml=True)`, the default model since laya 0.5) reads
+one image, audio or video value per decision. The engine takes exactly one input,
+so the client sends the media value and passes the prompt text to each question as
+context. Use the `vega` checkpoint (`load_options={"vegaml": "4b"}` picks a larger
+reader) with the PyTorch backend (`kedi-decisions[laya]` installs Laya's vision and audio
+extras; video also needs the `ffmpeg` binary):
+
+```python
+from pydantic_ai import BinaryContent
+
+with LayaClient("vega", backend="torch") as client:
+    agent = Agent(client.as_pydantic_model(), output_type=Route)
+    photo = BinaryContent(open("ticket.png", "rb").read(), media_type="image/png")
+    result = agent.run_sync(["Which team handles this ticket?", photo])
+```
+
+In Kedi the model id is `laya/vega`. Pydantic AI `BinaryContent` and LangChain
+base64 `image`, `audio` and `video` blocks are sent; the decision state refers to
+each value by a label such as `<image 1>`. URLs are rejected: load the file
+first. A second media value in a decision, or media for a text-only
+checkpoint (Laya's encoders and the MLX runtime), fails before inference with
+the reason. Every `DecisionEvaluator` exposes `media_kinds`, the kinds its client
+reads; a client without media support keeps its text-only signature.
+
 ## Context and evidence
 
 - The built-in MLX loader checks the actual tokenizer, question/option budget,
