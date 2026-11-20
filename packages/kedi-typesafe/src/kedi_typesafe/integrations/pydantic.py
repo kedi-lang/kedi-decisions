@@ -174,7 +174,9 @@ class TypeSafeModel(upstream.TypeSafeModel):
         if output_tool is None and not tools:
             raise UserError("TypeSafeModel requires an output schema or a hand-off tool")
         route = prepare_routing(
-            output_tool.parameters_json_schema if output_tool else {"properties": {}},
+            output_tool.parameters_json_schema
+            if output_tool
+            else {"type": "object", "properties": {}, "required": []},
             [
                 {
                     "name": tool.name,
