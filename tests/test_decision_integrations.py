@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.messages import ModelRequest, ModelResponse, ToolCallPart, UserPromptPart
@@ -198,6 +198,25 @@ async def test_langchain_threshold_sync_async_and_metadata(evaluator):
         assert result["raw"].usage_metadata["input_tokens"] == 18
         assert result["raw"].response_metadata["decisions"]["provider"] == "local-test"
     assert model._identifying_params["threshold"] == 0.95
+
+
+def test_explicit_none_boolean_threshold_is_accepted(evaluator):
+    """An explicit decision_boolean_threshold=None is valid, like omitting it
+    (audit #215 D5)."""
+    model = DecisionChatModel(
+        model_name="test-decision", evaluator=evaluator, decision_boolean_threshold=None
+    )
+    assert model.decision_boolean_threshold is None
+    assert (
+        DecisionChatModel(
+            model_name="test-decision", evaluator=evaluator, decision_boolean_threshold=0.5
+        ).decision_boolean_threshold
+        == 0.5
+    )
+    with pytest.raises(ValidationError):
+        DecisionChatModel(
+            model_name="test-decision", evaluator=evaluator, decision_boolean_threshold=2.0
+        )
 
 
 def test_missing_clients_and_invalid_threshold():
