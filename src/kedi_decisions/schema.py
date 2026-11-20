@@ -246,9 +246,7 @@ def _question_for_property(
         assert is_list(variants)
         non_null = [item for item in variants if item != {"type": "null"}]
         if not non_null:
-            raise DecisionSchemaError(
-                f"Output property {key!r} must declare a non-null type"
-            )
+            raise DecisionSchemaError(f"Output property {key!r} must declare a non-null type")
         inner = non_null[0]
         schema = {**inner, **{name: value for name, value in schema.items() if name != "anyOf"}}
         variants = schema.get("anyOf")

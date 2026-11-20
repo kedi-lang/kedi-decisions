@@ -93,9 +93,7 @@ def test_mlx_check_measures_context_augmented_prompt_with_media(local_runtime, m
     client = LayaClient("test", backend="mlx")
     audio = DecisionMedia(kind="audio", data=b"x" * 100, media_type="audio/wav")
     with pytest.raises(ValueError, match="question token budget"):
-        client.decide(
-            "word " * 9, {"x": Noul(instructions="one two", criteria={})}, media=[audio]
-        )
+        client.decide("word " * 9, {"x": Noul(instructions="one two", criteria={})}, media=[audio])
     assert calls == []
 
 
@@ -108,7 +106,9 @@ def test_mlx_check_rejects_large_media(local_runtime, monkeypatch):
         kind="audio", data=b"\xff" * (5 * 1024 * 1024), media_type="audio/wav"
     )
     with pytest.raises(ValueError, match="context window"):
-        client.decide("hi", {"x": Noul(instructions="Is it a cat?", criteria={})}, media=[big_audio])
+        client.decide(
+            "hi", {"x": Noul(instructions="Is it a cat?", criteria={})}, media=[big_audio]
+        )
     assert calls == []
 
 

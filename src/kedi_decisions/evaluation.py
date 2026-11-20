@@ -58,9 +58,7 @@ def _request_metadata(
     # fingerprints they had before.
     media_fingerprint = _media_fingerprint(media) if media else None
     state_fingerprint = _json_fingerprint(
-        {"state": state, "media": media_fingerprint}
-        if media_fingerprint is not None
-        else state
+        {"state": state, "media": media_fingerprint} if media_fingerprint is not None else state
     )
     questions_fingerprint = _json_fingerprint(questions)
     config_fingerprint = _json_fingerprint(
