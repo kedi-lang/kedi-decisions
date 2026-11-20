@@ -140,7 +140,14 @@ class LayaClient:
             if self.backend == "mlx" and not self._borrowed:
                 from ._mlx_context import check_mlx_context
 
-                check_mlx_context(self._predictor, state, payload)
+                # Check the prompt exactly as predict() receives it: with media
+                # the state is folded into each question's instructions and the
+                # state argument is None, so the pre-context state must not be
+                # measured instead.
+                prompt_state, prompt_questions = (
+                    (None, _with_context(payload, state)) if media else (state, payload)
+                )
+                check_mlx_context(self._predictor, prompt_state, prompt_questions, media=media)
             if media:
                 # Laya's engine reads exactly one input: the text state, or one media value.
                 # With media, the prompt text becomes context in each question.

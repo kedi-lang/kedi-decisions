@@ -7,6 +7,7 @@ from kedi_laya import LayaClient
 from kedi_laya._mlx_context import check_mlx_context
 
 from kedi_decisions.contracts import BooleanQuestion as Noul
+from kedi_decisions.contracts import DecisionMedia
 
 
 class Tokenizer:
@@ -66,3 +67,57 @@ def test_owned_mlx_client_checks_context_before_prediction(local_runtime, monkey
     response = client.decide("valid", {"x": Noul(instructions="yes", criteria={})})
     assert response.usage.input_tokens is None
     assert calls == ["valid"]
+
+
+def _mlx_engine(monkeypatch, local_runtime):
+    """A fake MLX predictor behind the lazy loader, recording predict() calls."""
+    calls = []
+
+    def predict(state, questions, *, image=None, audio=None, video=None):
+        calls.append({"state": state, "questions": questions, "audio": audio, "image": image})
+        return {"answers": {"x": {"type": "noul", "noul": 0.9}}}
+
+    local_runtime.predict = predict
+    monkeypatch.setattr(
+        "kedi_laya.client.import_module",
+        lambda name: SimpleNamespace(load=lambda *args, **kwargs: local_runtime),
+    )
+    return calls
+
+
+def test_mlx_check_measures_context_augmented_prompt_with_media(local_runtime, monkeypatch):
+    """With media, the state is folded into each question's instructions, so a
+    long state must trip the question budget even when the raw instructions are
+    short (audit #215 D6)."""
+    calls = _mlx_engine(monkeypatch, local_runtime)
+    client = LayaClient("test", backend="mlx")
+    audio = DecisionMedia(kind="audio", data=b"x" * 100, media_type="audio/wav")
+    with pytest.raises(ValueError, match="question token budget"):
+        client.decide(
+            "word " * 9, {"x": Noul(instructions="one two", criteria={})}, media=[audio]
+        )
+    assert calls == []
+
+
+def test_mlx_check_rejects_large_media(local_runtime, monkeypatch):
+    """A 5 MB audio clip exceeds the context window on its media bytes alone
+    (audit #215 D6)."""
+    calls = _mlx_engine(monkeypatch, local_runtime)
+    client = LayaClient("test", backend="mlx")
+    big_audio = DecisionMedia(
+        kind="audio", data=b"\xff" * (5 * 1024 * 1024), media_type="audio/wav"
+    )
+    with pytest.raises(ValueError, match="context window"):
+        client.decide("hi", {"x": Noul(instructions="Is it a cat?", criteria={})}, media=[big_audio])
+    assert calls == []
+
+
+def test_mlx_context_counts_media_bytes(local_runtime):
+    """Media bytes count against the window; the check also accepts small media
+    (audit #215 D6)."""
+    questions = {"x": {"type": "choice", "instructions": "one", "criteria": {"a": "a"}}}
+    small = [DecisionMedia(kind="audio", data=b"x" * 100, media_type="audio/wav")]
+    check_mlx_context(local_runtime, None, questions, media=small)
+    big = [DecisionMedia(kind="audio", data=b"x" * (20 * 1024), media_type="audio/wav")]
+    with pytest.raises(ValueError, match="context window"):
+        check_mlx_context(local_runtime, None, questions, media=big)
