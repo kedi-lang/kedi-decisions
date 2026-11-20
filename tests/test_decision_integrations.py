@@ -200,6 +200,45 @@ async def test_langchain_threshold_sync_async_and_metadata(evaluator):
     assert model._identifying_params["threshold"] == 0.95
 
 
+@pytest.mark.asyncio
+async def test_chat_model_aclose_calls_evaluator_aclose():
+    """DecisionChatModel.aclose() must call the evaluator's aclose(), not just
+    aclose_current() and close() (audit #215 D9)."""
+    calls: list[str] = []
+
+    class RecordingEvaluator:
+        model_name = "fake"
+        threshold = 0.85
+        media_kinds = frozenset()
+
+        @property
+        def provider_name(self):
+            return "recording"
+
+        @property
+        def base_url(self):
+            return ""
+
+        async def evaluate(self, **kwargs):
+            raise AssertionError
+
+        def evaluate_sync(self, **kwargs):
+            raise AssertionError
+
+        def close(self):
+            calls.append("close")
+
+        async def aclose_current(self):
+            calls.append("aclose_current")
+
+        async def aclose(self):
+            calls.append("aclose")
+
+    model = DecisionChatModel(model_name="fake", evaluator=RecordingEvaluator())
+    await model.aclose()
+    assert calls == ["aclose", "aclose_current", "close"]
+
+
 def test_resolve_routing_accepts_tool_with_null_parameters():
     """A tool with "parameters": None routes like a parameterless tool instead
     of raising AttributeError (audit #215 D8)."""
