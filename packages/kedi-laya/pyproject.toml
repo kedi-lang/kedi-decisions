@@ -9,6 +9,12 @@ description = "Local Laya decision models for Kedi, Pydantic AI and LangChain"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
+authors = [
+    {name = "Mert Sırakaya"},
+    {name = "Doğukan Yiğit Polat"},
+    {email = "mert@kedi-lang.org"},
+    {email = "yigit@neurograph.net"},
+]
 dependencies = ["kedi-decisions>=0.1.6,<0.2"]
 
 [project.urls]
