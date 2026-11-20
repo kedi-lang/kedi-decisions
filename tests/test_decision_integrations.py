@@ -293,6 +293,66 @@ async def test_async_client_is_required():
 
 
 @pytest.mark.asyncio
+async def test_media_bytes_change_state_and_request_fingerprints():
+    """Different image bytes give different fingerprints, identical bytes give
+    identical ones, and media-free requests keep their fingerprints (audit #215 D2)."""
+    from kedi_decisions.contracts import DecisionMedia
+    from kedi_decisions.evaluation import _json_fingerprint
+
+    schema = {
+        "type": "object",
+        "properties": {"ok": {"type": "boolean", "description": "Is it a cat?"}},
+        "required": ["ok"],
+    }
+
+    class MediaClient:
+        media_kinds = frozenset({"image"})
+        probability_decimals = None
+
+        def _response(self, model):
+            return DecisionResponse(
+                model=model or "fake",
+                answers={"ok": BooleanAnswer(probability=0.9)},
+                usage=DecisionUsage(input_tokens=3, output_tokens=1),
+            )
+
+    class AsyncMediaClient(MediaClient):
+        async def decide(self, state, questions, *, model=None, **kwargs):
+            return self._response(model)
+
+    class SyncMediaClient(MediaClient):
+        def decide(self, state, questions, *, model=None, **kwargs):
+            return self._response(model)
+
+    state = "What is in this image? <image 1>"
+    cat = [DecisionMedia(kind="image", data=b"CAT-IMAGE-BYTES-AAAA")]
+    dog = [DecisionMedia(kind="image", data=b"DOG-IMAGE-BYTES-BBBB")]
+    evaluator = DecisionEvaluator(
+        "fake-model", client=AsyncMediaClient(), sync_client=SyncMediaClient()
+    )
+
+    first = await evaluator.evaluate(state=state, schema=schema, media=cat)
+    second = await evaluator.evaluate(state=state, schema=schema, media=dog)
+    repeat = await evaluator.evaluate(state=state, schema=schema, media=cat)
+    sync_first = evaluator.evaluate_sync(state=state, schema=schema, media=cat)
+    plain = await evaluator.evaluate(state=state, schema=schema)
+
+    assert first.metadata["state_fingerprint"] != second.metadata["state_fingerprint"]
+    assert first.metadata["request_fingerprint"] != second.metadata["request_fingerprint"]
+    assert first.metadata["state_fingerprint"] == repeat.metadata["state_fingerprint"]
+    assert first.metadata["request_fingerprint"] == repeat.metadata["request_fingerprint"]
+    assert sync_first.metadata["state_fingerprint"] == first.metadata["state_fingerprint"]
+    assert sync_first.metadata["request_fingerprint"] == first.metadata["request_fingerprint"]
+    assert first.metadata["questions_fingerprint"] == second.metadata["questions_fingerprint"]
+    assert first.metadata["config_fingerprint"] == second.metadata["config_fingerprint"]
+    assert first.metadata["media_fingerprint"] != second.metadata["media_fingerprint"]
+    assert first.metadata["media_fingerprint"] == repeat.metadata["media_fingerprint"]
+    # Media-free requests keep the fingerprints they had before the fix.
+    assert plain.metadata["state_fingerprint"] == _json_fingerprint(state)
+    assert "media_fingerprint" not in plain.metadata
+
+
+@pytest.mark.asyncio
 async def test_withheld_tools_are_not_sent_to_provider(evaluator):
     from pydantic_ai.tools import ToolDefinition
 
