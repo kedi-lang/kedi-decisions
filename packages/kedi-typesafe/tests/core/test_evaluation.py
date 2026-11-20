@@ -471,6 +471,16 @@ def test_closed_loop_clients_are_released_when_the_loop_is_collected(
     assert len(created) == 2
 
 
+@pytest.mark.asyncio
+async def test_aclose_and_aclose_current_are_no_ops_without_owned_clients() -> None:
+    """Closing an evaluator that never created a client does nothing
+    (audit #215 D3)."""
+    evaluator = TypeSafeEvaluator("jev-test", api_key="secret")
+    await evaluator.aclose()
+    await evaluator.aclose_current()
+    assert evaluator._clients == {}
+
+
 def _single_bool_schema() -> dict[str, Any]:
     return {
         "type": "object",

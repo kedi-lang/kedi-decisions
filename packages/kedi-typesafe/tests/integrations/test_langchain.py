@@ -374,6 +374,48 @@ def test_classifier_transport_closes_clients_across_event_loops(
     )
 
 
+@pytest.mark.asyncio
+async def test_classifier_transport_close_from_running_loop_schedules_async_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """close() called from async code schedules the paired async client's close
+    on the running loop instead of raising (audit #215 D3)."""
+    import asyncio
+
+    from kedi_typesafe.integrations import _langchain_transport as transport_module
+    from kedi_typesafe.integrations._langchain_transport import ClassifierTransport
+
+    class FakeHTTPClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeAsyncHTTPClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    class FakeClassifier:
+        def __init__(self, **kwargs: Any) -> None:
+            self.client = FakeHTTPClient()
+            self.async_client = FakeAsyncHTTPClient()
+
+        def model_copy(self, update: Any = None) -> FakeClassifier:
+            return self
+
+    monkeypatch.setattr(transport_module, "TypeSafeClassifier", FakeClassifier)
+    transport = ClassifierTransport(api_key="secret", timeout=5.0)
+    sync = transport._request(None, asynchronous=False)
+    transport.close()
+    assert sync.client.closed is True
+    await asyncio.sleep(0)
+    assert sync.async_client.closed is True
+
+
 def test_unknown_usage_remains_in_metadata_without_usage_counters() -> None:
     client = FakeSyncClient(
         [
