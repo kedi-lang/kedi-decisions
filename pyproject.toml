@@ -24,7 +24,7 @@ Repository = "https://github.com/kedi-lang/kedi-decisions"
 Issues = "https://github.com/kedi-lang/kedi-decisions/issues"
 
 [project.optional-dependencies]
-typesafe = ["kedi-typesafe==0.3.3"]
+typesafe = ["kedi-typesafe==0.3.5"]
 laya = ["kedi-laya[torch,pydantic]==0.1.2"]
 laya-mlx = ["kedi-laya[mlx,pydantic]==0.1.2"]
 pydantic = ["pydantic-ai-slim>=2.66.0,<2.67"]

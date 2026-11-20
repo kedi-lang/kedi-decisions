@@ -231,6 +231,12 @@ class DecisionModel(Model):
             completed,
             allow_final=output is not None,
         )
+        if route.route_key is None and output is None:
+            # Every hand-off has completed and there is no final output to fall
+            # back to. Evaluating the empty schema would only raise a
+            # DecisionSchemaError from the plan build; report the outcome as
+            # the unselected hand-off instead.
+            raise UserError("The decision model did not select a hand-off above the threshold")
         result = await self._evaluator.evaluate(
             state=state, schema=route.schema, threshold=threshold, media=media or ()
         )

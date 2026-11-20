@@ -17,10 +17,12 @@ from pydantic_ai.messages import (
     SystemPromptPart,
     TextContent,
     TextPart,
+    ToolCallPart,
     UserPromptPart,
 )
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
+from pydantic_ai.tools import ToolDefinition
 from pydantic_extra_types.phone_numbers import PhoneNumber
 from typesafe_sdk import (
     Answer,
@@ -369,3 +371,60 @@ async def test_model_default_settings_are_validated() -> None:
     parameters = ModelRequestParameters()
     with pytest.raises(UserError, match="temperature"):
         await model.request([ModelRequest.user_text_prompt("state")], None, parameters)
+
+
+@pytest.mark.asyncio
+async def test_hand_off_only_request_reaches_the_provider() -> None:
+    """A hand-off-only request sends the empty object schema instead of failing
+    the plan build (audit #215 D1)."""
+
+    class RoutingClient:
+        def __init__(self) -> None:
+            self.calls: list[Mapping[str, Question]] = []
+
+        async def system_one(
+            self,
+            state: JSONValue,
+            questions: Mapping[str, Question],
+            *,
+            model: str | None = None,
+        ) -> SystemOneResponse:
+            self.calls.append(dict(questions))
+            answers: dict[str, Answer] = {}
+            for key, question in questions.items():
+                if isinstance(question, Choice):
+                    options = list(question.criteria)
+                    selected = "lookup_release" if "lookup_release" in options else options[-1]
+                    answers[key] = ChoiceAnswer(
+                        choice=selected,
+                        confidence=0.9,
+                        probabilities={name: float(name == selected) for name in options},
+                    )
+                else:
+                    answers[key] = NoulAnswer(noul=0.9)
+            return SystemOneResponse(model="jev-test", usage=Usage(), answers=answers)
+
+        async def aclose(self) -> None:
+            pass
+
+    client = RoutingClient()
+    model = TypeSafeModel("jev-latest", client=client)
+    parameters = ModelRequestParameters(
+        allow_text_output=False,
+        output_tools=[],
+        function_tools=[
+            ToolDefinition(
+                name="lookup_release",
+                description="Look up a release",
+                parameters_json_schema={"type": "object", "properties": {}, "required": []},
+            ),
+        ],
+    )
+    response = await model.request(
+        [ModelRequest(parts=[UserPromptPart(content="Which release?")])],
+        None,
+        parameters,
+    )
+    assert len(client.calls) == 1
+    assert isinstance(response.parts[0], ToolCallPart)
+    assert response.parts[0].tool_name == "lookup_release"

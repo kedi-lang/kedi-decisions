@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.messages import ModelRequest, ModelResponse, ToolCallPart, UserPromptPart
@@ -200,6 +200,116 @@ async def test_langchain_threshold_sync_async_and_metadata(evaluator):
     assert model._identifying_params["threshold"] == 0.95
 
 
+def test_null_only_anyof_is_a_schema_error():
+    """anyOf with only null variants is a schema error, not an uncaught
+    StopIteration (audit #215 D10)."""
+    from kedi_decisions.errors import DecisionSchemaError
+    from kedi_decisions.schema import build_evaluation_plan
+
+    schema = {
+        "type": "object",
+        "properties": {"x": {"anyOf": [{"type": "null"}, {"type": "null"}]}},
+        "required": ["x"],
+    }
+    with pytest.raises(DecisionSchemaError, match="non-null"):
+        build_evaluation_plan(schema)
+
+
+@pytest.mark.asyncio
+async def test_chat_model_aclose_calls_evaluator_aclose():
+    """DecisionChatModel.aclose() must call the evaluator's aclose(), not just
+    aclose_current() and close() (audit #215 D9)."""
+    calls: list[str] = []
+
+    class RecordingEvaluator:
+        model_name = "fake"
+        threshold = 0.85
+        media_kinds = frozenset()
+
+        @property
+        def provider_name(self):
+            return "recording"
+
+        @property
+        def base_url(self):
+            return ""
+
+        async def evaluate(self, **kwargs):
+            raise AssertionError
+
+        def evaluate_sync(self, **kwargs):
+            raise AssertionError
+
+        def close(self):
+            calls.append("close")
+
+        async def aclose_current(self):
+            calls.append("aclose_current")
+
+        async def aclose(self):
+            calls.append("aclose")
+
+    model = DecisionChatModel(model_name="fake", evaluator=RecordingEvaluator())
+    await model.aclose()
+    assert calls == ["aclose", "aclose_current", "close"]
+
+
+def test_resolve_routing_accepts_tool_with_null_parameters():
+    """A tool with "parameters": None routes like a parameterless tool instead
+    of raising AttributeError (audit #215 D8)."""
+    from kedi_decisions.evaluation import EvaluationResult
+    from kedi_decisions.routing import RoutingRequest, resolve_routing
+
+    tool = {"name": "lookup", "description": "Look it up", "parameters": None}
+    request = RoutingRequest(schema={}, route_key="__typesafe_route", tools=(tool,))
+    result = EvaluationResult(
+        values={"__typesafe_route": "lookup"},
+        model="fake",
+        input_tokens=1,
+        output_tokens=1,
+        metadata={"answers": {"__typesafe_route": {"probabilities": {"lookup": 0.95}}}},
+    )
+    normalized, call = resolve_routing(result, request, 0.6)
+    assert call == tool
+    assert normalized.values == {}
+
+
+def test_root_typesafe_pin_matches_workspace_version():
+    """The root typesafe extra must pin the kedi-typesafe version the workspace
+    actually ships (audit #215 D7)."""
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    root_pyproject = tomllib.loads((root / "pyproject.toml").read_text())
+    workspace_pyproject = tomllib.loads(
+        (root / "packages/kedi-typesafe/pyproject.toml").read_text()
+    )
+    version = workspace_pyproject["project"]["version"]
+    assert root_pyproject["project"]["optional-dependencies"]["typesafe"] == [
+        f"kedi-typesafe=={version}"
+    ]
+
+
+def test_explicit_none_boolean_threshold_is_accepted(evaluator):
+    """An explicit decision_boolean_threshold=None is valid, like omitting it
+    (audit #215 D5)."""
+    model = DecisionChatModel(
+        model_name="test-decision", evaluator=evaluator, decision_boolean_threshold=None
+    )
+    assert model.decision_boolean_threshold is None
+    assert (
+        DecisionChatModel(
+            model_name="test-decision", evaluator=evaluator, decision_boolean_threshold=0.5
+        ).decision_boolean_threshold
+        == 0.5
+    )
+    with pytest.raises(ValidationError):
+        DecisionChatModel(
+            model_name="test-decision", evaluator=evaluator, decision_boolean_threshold=2.0
+        )
+
+
 def test_missing_clients_and_invalid_threshold():
     with pytest.raises(ValueError, match="finite"):
         DecisionEvaluator("x", threshold=float("nan"))
@@ -290,6 +400,99 @@ async def test_async_client_is_required():
     evaluator = DecisionEvaluator("x")
     with pytest.raises(ValueError, match="async decision client"):
         await evaluator.evaluate(state="Review", schema=Review.model_json_schema())
+
+
+@pytest.mark.asyncio
+async def test_all_hand_offs_completed_raises_user_error():
+    """When every hand-off tool has already run, the model reports that no
+    hand-off was selected instead of failing the empty plan build
+    (audit #215 D4)."""
+    from pydantic_ai.messages import ToolReturnPart
+    from pydantic_ai.tools import ToolDefinition
+
+    class GuardClient:
+        media_kinds = frozenset()
+        probability_decimals = None
+
+        async def decide(self, *args, **kwargs):
+            raise AssertionError("the client must not be reached")
+
+    model = DecisionModel(DecisionEvaluator("fake", client=GuardClient()))
+    handoff = ToolDefinition(
+        name="lookup",
+        description="Look it up",
+        parameters_json_schema={"type": "object", "properties": {}},
+    )
+    messages = [
+        ModelRequest(parts=[UserPromptPart(content="look it up")]),
+        ModelResponse(parts=[ToolCallPart("lookup", {}, tool_call_id="c1")]),
+        ModelRequest(parts=[ToolReturnPart("lookup", "done", tool_call_id="c1")]),
+    ]
+    parameters = ModelRequestParameters(
+        allow_text_output=False, output_tools=[], function_tools=[handoff]
+    )
+    with pytest.raises(UserError, match="above the threshold"):
+        await model.request(messages, None, parameters)
+
+
+@pytest.mark.asyncio
+async def test_media_bytes_change_state_and_request_fingerprints():
+    """Different image bytes give different fingerprints, identical bytes give
+    identical ones, and media-free requests keep their fingerprints (audit #215 D2)."""
+    from kedi_decisions.contracts import DecisionMedia
+    from kedi_decisions.evaluation import _json_fingerprint
+
+    schema = {
+        "type": "object",
+        "properties": {"ok": {"type": "boolean", "description": "Is it a cat?"}},
+        "required": ["ok"],
+    }
+
+    class MediaClient:
+        media_kinds = frozenset({"image"})
+        probability_decimals = None
+
+        def _response(self, model):
+            return DecisionResponse(
+                model=model or "fake",
+                answers={"ok": BooleanAnswer(probability=0.9)},
+                usage=DecisionUsage(input_tokens=3, output_tokens=1),
+            )
+
+    class AsyncMediaClient(MediaClient):
+        async def decide(self, state, questions, *, model=None, **kwargs):
+            return self._response(model)
+
+    class SyncMediaClient(MediaClient):
+        def decide(self, state, questions, *, model=None, **kwargs):
+            return self._response(model)
+
+    state = "What is in this image? <image 1>"
+    cat = [DecisionMedia(kind="image", data=b"CAT-IMAGE-BYTES-AAAA")]
+    dog = [DecisionMedia(kind="image", data=b"DOG-IMAGE-BYTES-BBBB")]
+    evaluator = DecisionEvaluator(
+        "fake-model", client=AsyncMediaClient(), sync_client=SyncMediaClient()
+    )
+
+    first = await evaluator.evaluate(state=state, schema=schema, media=cat)
+    second = await evaluator.evaluate(state=state, schema=schema, media=dog)
+    repeat = await evaluator.evaluate(state=state, schema=schema, media=cat)
+    sync_first = evaluator.evaluate_sync(state=state, schema=schema, media=cat)
+    plain = await evaluator.evaluate(state=state, schema=schema)
+
+    assert first.metadata["state_fingerprint"] != second.metadata["state_fingerprint"]
+    assert first.metadata["request_fingerprint"] != second.metadata["request_fingerprint"]
+    assert first.metadata["state_fingerprint"] == repeat.metadata["state_fingerprint"]
+    assert first.metadata["request_fingerprint"] == repeat.metadata["request_fingerprint"]
+    assert sync_first.metadata["state_fingerprint"] == first.metadata["state_fingerprint"]
+    assert sync_first.metadata["request_fingerprint"] == first.metadata["request_fingerprint"]
+    assert first.metadata["questions_fingerprint"] == second.metadata["questions_fingerprint"]
+    assert first.metadata["config_fingerprint"] == second.metadata["config_fingerprint"]
+    assert first.metadata["media_fingerprint"] != second.metadata["media_fingerprint"]
+    assert first.metadata["media_fingerprint"] == repeat.metadata["media_fingerprint"]
+    # Media-free requests keep the fingerprints they had before the fix.
+    assert plain.metadata["state_fingerprint"] == _json_fingerprint(state)
+    assert "media_fingerprint" not in plain.metadata
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import gc
 from collections.abc import Mapping
 from typing import Any
 
@@ -409,6 +411,74 @@ def test_only_closes_owned_sync_client(monkeypatch: pytest.MonkeyPatch) -> None:
         "model": "jev-test",
         "timeout": 3.0,
     }
+
+
+def test_async_clients_do_not_leak_across_event_loops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Clients bound to closed loops are closed by aclose() instead of being kept
+    (audit #215 D3)."""
+    created: list[FakeClient] = []
+
+    def build_client(**kwargs: object) -> FakeClient:
+        client = FakeClient(SystemOneResponse(model="jev", usage=Usage(), answers={}))
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(evaluation_module, "AsyncTypeSafeClient", build_client)
+    evaluator = TypeSafeEvaluator("jev-test", api_key="secret")
+
+    loops: list[asyncio.AbstractEventLoop] = []
+
+    async def use_once() -> None:
+        loops.append(asyncio.get_running_loop())
+        evaluator.async_client()
+
+    asyncio.run(use_once())
+    asyncio.run(use_once())
+    # Both loops are closed but still referenced, so the cache still holds them.
+    assert len(evaluator._clients) == 2
+    assert all(loop.is_closed() for loop in evaluator._clients)
+
+    asyncio.run(evaluator.aclose())
+    assert evaluator._clients == {}
+    assert len(created) == 2
+    assert all(client.closed for client in created)
+
+
+def test_closed_loop_clients_are_released_when_the_loop_is_collected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A closed loop that nothing references must not keep its client cached
+    (audit #215 D3)."""
+    created: list[FakeClient] = []
+
+    def build_client(**kwargs: object) -> FakeClient:
+        client = FakeClient(SystemOneResponse(model="jev", usage=Usage(), answers={}))
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(evaluation_module, "AsyncTypeSafeClient", build_client)
+    evaluator = TypeSafeEvaluator("jev-test", api_key="secret")
+
+    async def use_once() -> None:
+        evaluator.async_client()
+
+    asyncio.run(use_once())
+    asyncio.run(use_once())
+    gc.collect()
+    assert evaluator._clients == {}
+    assert len(created) == 2
+
+
+@pytest.mark.asyncio
+async def test_aclose_and_aclose_current_are_no_ops_without_owned_clients() -> None:
+    """Closing an evaluator that never created a client does nothing
+    (audit #215 D3)."""
+    evaluator = TypeSafeEvaluator("jev-test", api_key="secret")
+    await evaluator.aclose()
+    await evaluator.aclose_current()
+    assert evaluator._clients == {}
 
 
 def _single_bool_schema() -> dict[str, Any]:

@@ -7,6 +7,7 @@ import math
 import os
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol, TypeAlias
+from weakref import WeakKeyDictionary
 
 from kedi_decisions.evaluation import EvaluationResult, ResultDecoder
 from typesafe_sdk import (
@@ -148,7 +149,11 @@ class TypeSafeEvaluator(ResultDecoder):
         self._base_url = base_url or os.environ.get("TYPESAFE_BASE_URL", "https://api.typesafe.ai")
         self._timeout = timeout
         self._borrowed_client = client
-        self._clients: dict[asyncio.AbstractEventLoop, AsyncSystemOneClient] = {}
+        self._clients: WeakKeyDictionary[asyncio.AbstractEventLoop, AsyncSystemOneClient] = (
+            WeakKeyDictionary()
+        )
+        """Owned async clients, keyed by event loop. The weak keys release a
+        client as soon as its loop is collected instead of leaking it."""
         self._owns_sync_client = sync_client is None
         self._sync_client = sync_client
         self._probability_decimals = getattr(client or sync_client, "probability_decimals", None)
@@ -294,7 +299,12 @@ class TypeSafeEvaluator(ResultDecoder):
         ).resolve(state)
 
     async def aclose(self) -> None:
-        await self.aclose_current()
+        """Close every owned async client, including ones bound to closed loops."""
+        if self._borrowed_client is None:
+            clients = list(self._clients.values())
+            self._clients.clear()
+            if clients:
+                await asyncio.gather(*(client.aclose() for client in clients))
         self.close()
 
     async def aclose_current(self) -> None:

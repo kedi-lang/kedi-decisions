@@ -34,6 +34,7 @@ def _request_metadata(
     *,
     model: str,
     threshold: float,
+    media: Sequence[DecisionMedia] = (),
 ) -> dict[str, str]:
     questions = [
         {
@@ -51,7 +52,14 @@ def _request_metadata(
         }
         for question in plan.questions
     ]
-    state_fingerprint = _json_fingerprint(state)
+    # Media bytes are part of the request: the state only refers to them by label
+    # (such as `<image 1>`), so two requests that differ only in media would
+    # otherwise fingerprint identically. Media-free requests keep the exact
+    # fingerprints they had before.
+    media_fingerprint = _media_fingerprint(media) if media else None
+    state_fingerprint = _json_fingerprint(
+        {"state": state, "media": media_fingerprint} if media_fingerprint is not None else state
+    )
     questions_fingerprint = _json_fingerprint(questions)
     config_fingerprint = _json_fingerprint(
         {
@@ -60,7 +68,7 @@ def _request_metadata(
             "boolean_comparator": ">",
         }
     )
-    return {
+    metadata = {
         "state_fingerprint": state_fingerprint,
         "questions_fingerprint": questions_fingerprint,
         "config_fingerprint": config_fingerprint,
@@ -72,6 +80,23 @@ def _request_metadata(
             }
         ),
     }
+    if media_fingerprint is not None:
+        metadata["media_fingerprint"] = media_fingerprint
+    return metadata
+
+
+def _media_fingerprint(media: Sequence[DecisionMedia]) -> str:
+    """SHA-256 of the media bytes, in prompt order, with kind and media type."""
+    return _json_fingerprint(
+        [
+            {
+                "kind": item.kind,
+                "media_type": item.media_type,
+                "sha256": hashlib.sha256(item.data).hexdigest(),
+            }
+            for item in media
+        ]
+    )
 
 
 def _json_fingerprint(value: Any) -> str:
@@ -382,6 +407,7 @@ class DecisionEvaluator(ResultDecoder):
             plan,
             model=self.model_name,
             threshold=effective_threshold,
+            media=media,
         )
         if not plan.decision_questions():
             return self._decode_result(
@@ -428,6 +454,7 @@ class DecisionEvaluator(ResultDecoder):
             plan,
             model=self.model_name,
             threshold=effective_threshold,
+            media=media,
         )
         if not plan.decision_questions():
             return self._decode_result(

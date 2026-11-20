@@ -154,7 +154,12 @@ class DecisionChatModel(BaseChatModel):
         "threshold", "decision_boolean_threshold", "decision_tool_call_threshold", mode="before"
     )
     @classmethod
-    def _validate_threshold(cls, value: Any) -> float:
+    def _validate_threshold(cls, value: Any) -> float | None:
+        # decision_boolean_threshold is optional: an explicit None means "use the
+        # evaluator default", just like omitting it. The other fields still
+        # reject None through their float type.
+        if value is None:
+            return None
         return validate_threshold(value)
 
     def __init__(
@@ -307,6 +312,11 @@ class DecisionChatModel(BaseChatModel):
         self._evaluator.close()
 
     async def aclose(self) -> None:
+        # The Evaluator protocol's aclose() is the full async teardown; the
+        # shipped evaluators implement it, but an evaluator with extra async
+        # teardown in aclose() was silently skipped before. Keep the partial
+        # teardown calls for evaluators that only implement those.
+        await self._evaluator.aclose()
         await self.aclose_current()
         self.close()
 
