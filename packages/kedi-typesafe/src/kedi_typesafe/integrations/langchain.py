@@ -77,10 +77,15 @@ class TypeSafeChatModel(DecisionChatModel):
         if self._transport is not None:
             self._transport.close()
 
+    async def aclose(self) -> None:
+        if self._transport is not None:
+            await self._transport.aclose()
+        await super().aclose()
+
     async def aclose_current(self) -> None:
         await self._evaluator.aclose_current()
         if self._transport is not None:
-            await self._transport.aclose()
+            await self._transport.aclose_current()
 
 
 __all__ = ["TypeSafeChatModel", "ToolCallProposed", "messages_to_state"]

@@ -313,6 +313,67 @@ async def test_context_managers_close_only_owned_clients() -> None:
     assert sync_client.closed is False
 
 
+def test_classifier_transport_closes_clients_across_event_loops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Loop-keyed classifiers are closed by aclose(), and close() also closes the
+    async client paired with the sync classifier (audit #215 D3)."""
+    import asyncio
+
+    from kedi_typesafe.integrations import _langchain_transport as transport_module
+    from kedi_typesafe.integrations._langchain_transport import ClassifierTransport
+
+    created: list[Any] = []
+
+    class FakeHTTPClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeAsyncHTTPClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    class FakeClassifier:
+        def __init__(self, **kwargs: Any) -> None:
+            self.client = FakeHTTPClient()
+            self.async_client = FakeAsyncHTTPClient()
+            created.append(self)
+
+        def model_copy(self, update: Any = None) -> FakeClassifier:
+            return self
+
+    monkeypatch.setattr(transport_module, "TypeSafeClassifier", FakeClassifier)
+    transport = ClassifierTransport(api_key="secret", timeout=5.0)
+
+    sync = transport._request(None, asynchronous=False)
+    transport.close()
+    assert sync.client.closed is True
+    assert sync.async_client.closed is True
+
+    loops: list[asyncio.AbstractEventLoop] = []
+
+    async def use_async() -> None:
+        loops.append(asyncio.get_running_loop())
+        transport._request(None, asynchronous=True)
+
+    asyncio.run(use_async())
+    asyncio.run(use_async())
+    # Both loops are closed but still referenced, so the cache still holds them.
+    assert len(transport._async) == 2
+    assert all(loop.is_closed() for loop in transport._async)
+    asyncio.run(transport.aclose())
+    assert transport._async == {}
+    assert all(
+        classifier.async_client.closed and classifier.client.closed for classifier in created
+    )
+
+
 def test_unknown_usage_remains_in_metadata_without_usage_counters() -> None:
     client = FakeSyncClient(
         [

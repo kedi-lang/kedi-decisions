@@ -4,6 +4,7 @@ import asyncio
 import os
 from collections.abc import Mapping
 from typing import Any
+from weakref import WeakKeyDictionary
 
 from langchain_typesafe import TypeSafeClassifier
 from langchain_typesafe.types import ClassifierRequest, State
@@ -29,7 +30,11 @@ class ClassifierTransport:
         self.timeout = timeout
         self.base_url = base_url or os.environ.get("TYPESAFE_BASE_URL", "https://api.typesafe.ai")
         self._sync: TypeSafeClassifier | None = None
-        self._async: dict[asyncio.AbstractEventLoop, TypeSafeClassifier] = {}
+        self._async: WeakKeyDictionary[asyncio.AbstractEventLoop, TypeSafeClassifier] = (
+            WeakKeyDictionary()
+        )
+        """Async classifiers, keyed by event loop. The weak keys release a
+        classifier as soon as its loop is collected instead of leaking it."""
 
     def _request(
         self,
@@ -116,18 +121,52 @@ class ClassifierTransport:
         )
 
     async def aclose(self) -> None:
+        """Close every cached async classifier, including ones bound to closed
+        loops, and the async client paired with the sync classifier."""
+        classifiers = list(self._async.values())
+        self._async.clear()
+        if self._sync is not None:
+            classifiers.append(self._sync)
+        await asyncio.gather(
+            *(base.async_client.aclose() for base in classifiers if base.async_client is not None)
+        )
+        for base in classifiers:
+            if base is self._sync:
+                continue
+            if base.client is not None:
+                base.client.close()
+
+    async def aclose_current(self) -> None:
+        """Close the async classifier bound to the current event loop."""
         base = self._async.pop(asyncio.get_running_loop(), None)
         if base is not None:
-            assert base.async_client is not None and base.client is not None
-            await base.async_client.aclose()
-            base.client.close()
+            if base.async_client is not None:
+                await base.async_client.aclose()
+            if base.client is not None:
+                base.client.close()
 
     def close(self) -> None:
         if self._sync is not None:
-            assert self._sync.client is not None
-            self._sync.client.close()
-            # The async client paired with the sync classifier was never used.
+            if self._sync.client is not None:
+                self._sync.client.close()
+            if self._sync.async_client is not None:
+                # The async client paired with the sync classifier is created
+                # at construction even though the sync path never uses it; close
+                # it instead of leaving it open.
+                _close_async_client(self._sync.async_client)
             self._sync = None
+
+
+def _close_async_client(client: Any) -> None:
+    """Close an async httpx client from synchronous teardown. Runs a fresh loop
+    when none is running; otherwise schedules the close on the running loop so
+    `close()` never raises for being called from async code."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(client.aclose())
+    else:
+        loop.create_task(client.aclose())
 
 
 class SyncClassifierTransport:
