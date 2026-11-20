@@ -33,7 +33,7 @@ def check_mlx_context(
     runtime = import_module("laya_mlx.common")
 
     tokenizer = agent.tok
-    state_tokens = (
+    state_tokens: list[Any] = (
         tokenizer(
             runtime.serialize_state(state).replace(tokenizer.mask_token, " "),
             add_special_tokens=False,
