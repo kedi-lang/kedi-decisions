@@ -81,6 +81,6 @@ def resolve_routing(
     tool = next((tool for tool in request.tools if tool["name"] == selected), None)
     if tool is None or probability < threshold:
         return normalized, None
-    if tool.get("parameters", {}).get("properties"):
+    if (tool.get("parameters") or {}).get("properties"):
         raise ToolCallProposed(selected, probability)
     return normalized, tool

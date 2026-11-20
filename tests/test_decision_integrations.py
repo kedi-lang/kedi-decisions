@@ -200,6 +200,26 @@ async def test_langchain_threshold_sync_async_and_metadata(evaluator):
     assert model._identifying_params["threshold"] == 0.95
 
 
+def test_resolve_routing_accepts_tool_with_null_parameters():
+    """A tool with "parameters": None routes like a parameterless tool instead
+    of raising AttributeError (audit #215 D8)."""
+    from kedi_decisions.evaluation import EvaluationResult
+    from kedi_decisions.routing import RoutingRequest, resolve_routing
+
+    tool = {"name": "lookup", "description": "Look it up", "parameters": None}
+    request = RoutingRequest(schema={}, route_key="__typesafe_route", tools=(tool,))
+    result = EvaluationResult(
+        values={"__typesafe_route": "lookup"},
+        model="fake",
+        input_tokens=1,
+        output_tokens=1,
+        metadata={"answers": {"__typesafe_route": {"probabilities": {"lookup": 0.95}}}},
+    )
+    normalized, call = resolve_routing(result, request, 0.6)
+    assert call == tool
+    assert normalized.values == {}
+
+
 def test_root_typesafe_pin_matches_workspace_version():
     """The root typesafe extra must pin the kedi-typesafe version the workspace
     actually ships (audit #215 D7)."""
