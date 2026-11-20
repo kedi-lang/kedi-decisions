@@ -200,6 +200,21 @@ async def test_langchain_threshold_sync_async_and_metadata(evaluator):
     assert model._identifying_params["threshold"] == 0.95
 
 
+def test_null_only_anyof_is_a_schema_error():
+    """anyOf with only null variants is a schema error, not an uncaught
+    StopIteration (audit #215 D10)."""
+    from kedi_decisions.errors import DecisionSchemaError
+    from kedi_decisions.schema import build_evaluation_plan
+
+    schema = {
+        "type": "object",
+        "properties": {"x": {"anyOf": [{"type": "null"}, {"type": "null"}]}},
+        "required": ["x"],
+    }
+    with pytest.raises(DecisionSchemaError, match="non-null"):
+        build_evaluation_plan(schema)
+
+
 @pytest.mark.asyncio
 async def test_chat_model_aclose_calls_evaluator_aclose():
     """DecisionChatModel.aclose() must call the evaluator's aclose(), not just
